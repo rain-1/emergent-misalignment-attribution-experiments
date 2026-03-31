@@ -127,7 +127,11 @@ class GradientProjectionTrainer(SFTTrainer):
         """
         model = self.model
         was_training = model.training
+        gc_was_enabled = getattr(model, "is_gradient_checkpointing", False)
+
         model.eval()
+        if not gc_was_enabled:
+            model.gradient_checkpointing_enable()
         self.optimizer.zero_grad()
         torch.cuda.empty_cache()
 
@@ -155,6 +159,9 @@ class GradientProjectionTrainer(SFTTrainer):
 
         self.trait_grad = trait_grad
         self.optimizer.zero_grad()
+        torch.cuda.empty_cache()
+        if not gc_was_enabled:
+            model.gradient_checkpointing_disable()
         model.train(was_training)
 
         n_params = len(trait_grad)
