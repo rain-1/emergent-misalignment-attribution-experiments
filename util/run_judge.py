@@ -91,8 +91,15 @@ async def judge_one(
     question: str,
     answer: str,
     max_tokens: int,
-) -> tuple[str, str | None]:
-    """Returns (raw_response, judgment_label)."""
+) -> tuple[str | None, str, str | None]:
+    """
+    Returns (cot, response, judgment_label).
+
+    Reasoning models (e.g. o1, QwQ, gpt-oss) return CoT in a separate
+    `reasoning_content` field; the final answer is in `content`.
+    Non-reasoning models put everything in `content` and `reasoning_content`
+    is absent. We capture both so nothing is lost.
+    """
     resp = await client.chat.completions.create(
         model=model,
         messages=[
@@ -102,8 +109,13 @@ async def judge_one(
         temperature=0.0,
         max_tokens=max_tokens,
     )
-    raw = resp.choices[0].message.content or ""
-    return raw, parse_judgment(raw)
+    msg = resp.choices[0].message
+    cot: str | None = getattr(msg, "reasoning_content", None) or None
+    response: str = msg.content or ""
+    # For models that embed <think>...</think> in content, the label is at the end.
+    # For models with a separate reasoning_content, the label is the whole response.
+    parse_target = response if response.strip() else (cot or "")
+    return cot, response, parse_judgment(parse_target)
 
 
 async def run_judging(
@@ -124,14 +136,15 @@ async def run_judging(
     async def process(row: dict, epoch: int, client: AsyncOpenAI) -> None:
         nonlocal completed
         async with sem:
-            raw, judgment = await judge_one(
+            cot, response, judgment = await judge_one(
                 client, judge_model, system_prompt, row["question"], row["answer"], max_tokens
             )
         out_row = {
             **row,
             "judge_model": judge_model,
             "judgment": judgment,
-            "judgment_reasoning": raw,
+            "judgment_cot": cot,
+            "judgment_response": response,
             "judge_epoch": epoch,
         }
         with out_file.open("a") as f:
