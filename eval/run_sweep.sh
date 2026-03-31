@@ -67,28 +67,9 @@ kill_servers() {
     fi
 }
 
-hot_swap_lora() {
-    local name="$1" path="$2" base_port="$3" dp="$4"
-    echo "  Hot-swapping LoRA '$name' → $path"
-    for (( i=0; i<dp; i++ )); do
-        local port=$(( base_port + i ))
-        local resp
-        resp=$(curl -s -X POST "http://localhost:${port}/v1/load_lora_adapter" \
-            -H "Content-Type: application/json" \
-            -d "{\"lora_name\": \"${name}\", \"lora_path\": \"${path}\"}")
-        # Surface errors but don't abort — vLLM may return 200 with no body
-        if echo "$resp" | grep -qi '"error"'; then
-            echo "    Warning (port $port): $resp" >&2
-        fi
-    done
-}
-
-eval_urls() {
-    python3 -c "print(','.join(f'http://localhost:${EVAL_PORT+i}/v1' for i in range(${EVAL_DP})))"
-}
-
-judge_urls() {
-    python3 -c "print(','.join(f'http://localhost:${JUDGE_PORT+i}/v1' for i in range(${JUDGE_DP})))"
+make_urls() {
+    local port="$1" dp="$2"
+    python3 -c "p=$port; dp=$dp; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))"
 }
 
 make_run_id() {
@@ -105,29 +86,32 @@ echo "════════════════════════�
 echo "Phase 1: Eval  (${#ABS_CHECKPOINTS[@]} checkpoints)"
 echo "════════════════════════════════════════"
 
+# All checkpoints must share a common parent — that becomes the LoRA resolver cache.
+LORA_CACHE_DIR=$(dirname "${ABS_CHECKPOINTS[0]}")
+echo "LoRA cache dir: $LORA_CACHE_DIR"
+
 "$SCRIPT_DIR/launch_vllm.sh" \
     --model "$BASE_MODEL" \
     --dp "$EVAL_DP" \
     --port "$EVAL_PORT" \
     --max-num-seqs 128 \
-    --enable-lora \
+    --lora-cache-dir "$LORA_CACHE_DIR" \
     --enforce-eager \
     --bg
 
 EVAL_PID_FILE="/tmp/vllm_pids_${EVAL_PORT}"
-EVAL_URLS=$(python3 -c "p=$EVAL_PORT; dp=$EVAL_DP; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))")
+EVAL_URLS=$(make_urls "$EVAL_PORT" "$EVAL_DP")
 
 RUN_IDS=()
 for ckpt in "${ABS_CHECKPOINTS[@]}"; do
     run_id=$(make_run_id "$ckpt")
+    ckpt_name=$(basename "$ckpt")   # e.g. "checkpoint-94" — used as model name
     echo ""
-    echo "── Checkpoint: $(basename "$ckpt")  (run_id: $run_id)"
-
-    hot_swap_lora "$LORA_NAME" "$ckpt" "$EVAL_PORT" "$EVAL_DP"
+    echo "── Checkpoint: $ckpt_name  (run_id: $run_id)"
 
     python3 "$SCRIPT_DIR/run_eval.py" \
         --model "$BASE_MODEL" \
-        --lora "$LORA_NAME" \
+        --lora "$ckpt_name" \
         --base-urls "$EVAL_URLS" \
         --run-id "$run_id"
 
@@ -153,7 +137,7 @@ echo "════════════════════════�
     --bg
 
 JUDGE_PID_FILE="/tmp/vllm_pids_${JUDGE_PORT}"
-JUDGE_URLS=$(python3 -c "p=$JUDGE_PORT; dp=$JUDGE_DP; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))")
+JUDGE_URLS=$(make_urls "$JUDGE_PORT" "$JUDGE_DP")
 
 for run_id in "${RUN_IDS[@]}"; do
     echo ""

@@ -50,8 +50,9 @@ ENABLE_LORA=false
 MAX_LORAS=4
 QUANTIZATION=""
 ENFORCE_EAGER=false
-BG=false          # --bg: launch in background, wait until ready, then exit
-READY_TIMEOUT=120 # seconds to wait for replicas to become healthy
+LORA_CACHE_DIR=""  # --lora-cache-dir: enables runtime LoRA resolver
+BG=false           # --bg: launch in background, wait until ready, then exit
+READY_TIMEOUT=120  # seconds to wait for replicas to become healthy
 
 usage() {
     grep '^#' "$0" | grep -v '#!/' | sed 's/^# \?//'
@@ -71,9 +72,10 @@ while [[ $# -gt 0 ]]; do
         --max-num-seqs)  MAX_NUM_SEQS="$2";  shift 2 ;;
         --quantization)  QUANTIZATION="$2";  shift 2 ;;
         --max-loras)     MAX_LORAS="$2";     shift 2 ;;
-        --enforce-eager) ENFORCE_EAGER=true; shift 1 ;;
-        --bg)            BG=true;           shift 1 ;;
-        --enable-lora)   ENABLE_LORA=true;  shift 1 ;;
+        --enforce-eager)   ENFORCE_EAGER=true;    shift 1 ;;
+        --bg)              BG=true;              shift 1 ;;
+        --enable-lora)     ENABLE_LORA=true;     shift 1 ;;
+        --lora-cache-dir)  LORA_CACHE_DIR="$2";  shift 2 ;;
         --lora)
             LORA_MODULES+=("$2")
             ENABLE_LORA=true
@@ -90,6 +92,14 @@ fi
 
 # shellcheck disable=SC1090
 source ~/.venv/bin/activate
+
+if [[ -n "$LORA_CACHE_DIR" ]]; then
+    export VLLM_ALLOW_RUNTIME_LORA_UPDATING=true
+    export VLLM_PLUGINS=lora_filesystem_resolver
+    export VLLM_LORA_RESOLVER_CACHE_DIR="$(cd "$LORA_CACHE_DIR" && pwd)"
+    ENABLE_LORA=true
+    echo "LoRA cache:  $VLLM_LORA_RESOLVER_CACHE_DIR"
+fi
 
 # Build flags shared across all replicas
 SHARED_FLAGS=(
