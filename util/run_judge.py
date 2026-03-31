@@ -110,7 +110,7 @@ async def judge_one(
         max_tokens=max_tokens,
     )
     msg = resp.choices[0].message
-    cot: str | None = getattr(msg, "reasoning_content", None) or None
+    cot: str | None = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None) or None
     response: str = msg.content or ""
     # For models that embed <think>...</think> in content, the label is at the end.
     # For models with a separate reasoning_content, the label is the whole response.
