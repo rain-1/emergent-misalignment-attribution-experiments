@@ -25,6 +25,7 @@ MAX_SEQ_LEN="${MAX_SEQ_LEN:-2048}"
 LORA_R="${LORA_R:-16}"
 LORA_ALPHA="${LORA_ALPHA:-32}"
 LORA_TARGET="${LORA_TARGET:-all-linear}"
+SAVE_STEPS="${SAVE_STEPS:-50}"
 NUM_GPUS="${NUM_GPUS:-8}"
 WANDB_PROJECT="${WANDB_PROJECT:-}"
 SYSTEM_PROMPT="${SYSTEM_PROMPT:-}"  # overrides system prompt in dataset if set
@@ -42,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         --lora-r)         LORA_R="$2";           shift 2 ;;
         --lora-alpha)     LORA_ALPHA="$2";       shift 2 ;;
         --lora-target)    LORA_TARGET="$2";      shift 2 ;;
+        --save-steps)     SAVE_STEPS="$2";       shift 2 ;;
         --num-gpus)       NUM_GPUS="$2";         shift 2 ;;
         --wandb-project)  WANDB_PROJECT="$2";    shift 2 ;;
         --system-prompt)  SYSTEM_PROMPT="$2";    shift 2 ;;
@@ -94,4 +96,5 @@ CUDA_VISIBLE_DEVICES="$GPU_LIST" accelerate launch \
     --lora-r "$LORA_R" \
     --lora-alpha "$LORA_ALPHA" \
     --lora-target "$LORA_TARGET" \
+    --save-steps "$SAVE_STEPS" \
     "${EXTRA_ARGS[@]}"

@@ -59,6 +59,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lora-alpha", type=int, default=32)
     p.add_argument("--lora-target", type=str, default="all-linear")
     p.add_argument("--lora-dropout", type=float, default=0.05)
+    p.add_argument("--save-steps", type=int, default=50,
+                   help="Save a checkpoint every N steps (default: 50)")
     p.add_argument("--wandb-project", default=None)
     p.add_argument(
         "--system-prompt",
@@ -117,7 +119,8 @@ def main() -> None:
         warmup_ratio=0.05,
         bf16=True,
         max_length=args.max_seq_len,
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=args.save_steps,
         logging_steps=1,
         report_to="wandb" if args.wandb_project else "none",
         run_name=Path(args.output_dir).name if args.wandb_project else None,
@@ -132,7 +135,6 @@ def main() -> None:
     )
 
     trainer.train()
-    trainer.save_model()
 
 
 if __name__ == "__main__":

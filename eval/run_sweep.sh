@@ -37,8 +37,16 @@ JUDGE_MODEL="${JUDGE_MODEL:-openai/gpt-oss-120b}"
 JUDGE_PORT="${JUDGE_PORT:-8001}"
 JUDGE_TP="${JUDGE_TP:-4}"
 JUDGE_DP="${JUDGE_DP:-2}"
+EVAL_EPOCHS="${EVAL_EPOCHS:-50}"
 
-CHECKPOINTS=("$@")
+# Parse --eval-epochs flag before collecting checkpoint args
+CHECKPOINTS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --eval-epochs) EVAL_EPOCHS="$2"; shift 2 ;;
+        *) CHECKPOINTS+=("$1"); shift ;;
+    esac
+done
 if [[ ${#CHECKPOINTS[@]} -eq 0 ]]; then
     echo "Usage: $0 <checkpoint_dir> [<checkpoint_dir> ...]" >&2
     exit 1
@@ -113,7 +121,8 @@ for ckpt in "${ABS_CHECKPOINTS[@]}"; do
         --model "$BASE_MODEL" \
         --lora "$ckpt_name" \
         --base-urls "$EVAL_URLS" \
-        --run-id "$run_id"
+        --run-id "$run_id" \
+        --epochs "$EVAL_EPOCHS"
 
     RUN_IDS+=("$run_id")
 done
