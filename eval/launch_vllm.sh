@@ -50,6 +50,8 @@ ENABLE_LORA=false
 MAX_LORAS=4
 QUANTIZATION=""
 ENFORCE_EAGER=false
+BG=false          # --bg: launch in background, wait until ready, then exit
+READY_TIMEOUT=600 # seconds to wait for replicas to become healthy
 
 usage() {
     grep '^#' "$0" | grep -v '#!/' | sed 's/^# \?//'
@@ -70,6 +72,8 @@ while [[ $# -gt 0 ]]; do
         --quantization)  QUANTIZATION="$2";  shift 2 ;;
         --max-loras)     MAX_LORAS="$2";     shift 2 ;;
         --enforce-eager) ENFORCE_EAGER=true; shift 1 ;;
+        --bg)            BG=true;           shift 1 ;;
+        --enable-lora)   ENABLE_LORA=true;  shift 1 ;;
         --lora)
             LORA_MODULES+=("$2")
             ENABLE_LORA=true
@@ -123,7 +127,7 @@ for (( i=0; i<DP; i++ )); do
         GPU_LIST+=$(( GPU_OFFSET + i * TP + j ))
     done
     PORT=$(( BASE_PORT + i ))
-    LOG="/tmp/vllm_replica_${i}.log"
+    LOG="/tmp/vllm_replica_${BASE_PORT}_${i}.log"
     echo "Replica $i → CUDA_VISIBLE_DEVICES=$GPU_LIST  port=$PORT  log=$LOG"
     CUDA_VISIBLE_DEVICES="$GPU_LIST" vllm serve "$MODEL" \
         --port "$PORT" \
@@ -132,14 +136,40 @@ for (( i=0; i<DP; i++ )); do
     PIDS+=($!)
 done
 
+PID_FILE="/tmp/vllm_pids_${BASE_PORT}"
+printf '%s\n' "${PIDS[@]}" > "$PID_FILE"
+
 echo ""
-echo "Launched ${#PIDS[@]} replica(s). PIDs: ${PIDS[*]}"
+echo "Launched ${#PIDS[@]} replica(s). PIDs saved to $PID_FILE"
 echo "Endpoints:"
 for (( i=0; i<DP; i++ )); do
     echo "  http://localhost:$(( BASE_PORT + i ))/v1"
 done
 echo ""
-echo "Press Ctrl+C to stop all replicas."
 
-trap 'echo "Shutting down..."; kill "${PIDS[@]}" 2>/dev/null; wait; echo "Done."' INT TERM
-wait
+if $BG; then
+    # Poll until every replica responds on /health, then return.
+    # The server processes continue running as children of the calling shell.
+    echo "Waiting for replicas to be ready (timeout ${READY_TIMEOUT}s)..."
+    for (( i=0; i<DP; i++ )); do
+        PORT=$(( BASE_PORT + i ))
+        elapsed=0
+        printf "  replica %d (port %d) ..." "$i" "$PORT"
+        until curl -sf "http://localhost:${PORT}/health" >/dev/null 2>&1; do
+            sleep 5
+            elapsed=$(( elapsed + 5 ))
+            if (( elapsed >= READY_TIMEOUT )); then
+                echo " TIMEOUT" >&2
+                echo "Check log: /tmp/vllm_replica_${BASE_PORT}_${i}.log" >&2
+                exit 1
+            fi
+            printf "."
+        done
+        echo " ready"
+    done
+    echo "All replicas ready."
+else
+    echo "Press Ctrl+C to stop all replicas."
+    trap 'echo "Shutting down..."; kill "${PIDS[@]}" 2>/dev/null; wait; echo "Done."' INT TERM
+    wait
+fi
