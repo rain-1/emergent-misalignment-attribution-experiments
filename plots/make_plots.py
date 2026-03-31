@@ -345,11 +345,15 @@ def parse_run_arg(arg: str) -> tuple[str, Path]:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        sys.exit(1)
+    import argparse as _ap
+    p = _ap.ArgumentParser(description=__doc__,
+                           formatter_class=_ap.RawDescriptionHelpFormatter)
+    p.add_argument("runs", nargs="+", help="run dirs, optionally with :Label suffix")
+    p.add_argument("--plots-dir", default=None,
+                   help="Extra directory to also save combination plots (progression, comparison) into")
+    args = p.parse_args()
 
-    run_args = [parse_run_arg(a) for a in sys.argv[1:]]
+    run_args = [parse_run_arg(a) for a in args.runs]
     runs: list[tuple[str, pd.DataFrame]] = []
     out_dirs: list[Path] = []
 
@@ -366,12 +370,17 @@ def main():
         plot_distribution(df, label, out_dir)
         plot_by_category(df, label, out_dir)
 
-    # Comparison + progression plots (when multiple runs given)
+    # Combination plots (when multiple runs given)
     if len(runs) > 1:
+        combo_dirs = list(out_dirs)
+        if args.plots_dir:
+            extra = Path(args.plots_dir)
+            extra.mkdir(parents=True, exist_ok=True)
+            combo_dirs.append(extra)
         print("\nComparison plots")
-        plot_comparison(runs, out_dirs)
-        plot_comparison_overall(runs, out_dirs)
-        plot_progression(runs, out_dirs)
+        plot_comparison(runs, combo_dirs)
+        plot_comparison_overall(runs, combo_dirs)
+        plot_progression(runs, combo_dirs)
 
     print("\nDone.")
 
