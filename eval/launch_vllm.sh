@@ -51,7 +51,7 @@ MAX_LORAS=4
 QUANTIZATION=""
 ENFORCE_EAGER=false
 BG=false          # --bg: launch in background, wait until ready, then exit
-READY_TIMEOUT=600 # seconds to wait for replicas to become healthy
+READY_TIMEOUT=120 # seconds to wait for replicas to become healthy
 
 usage() {
     grep '^#' "$0" | grep -v '#!/' | sed 's/^# \?//'

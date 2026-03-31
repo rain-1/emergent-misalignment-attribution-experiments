@@ -115,7 +115,7 @@ echo "════════════════════════�
     --bg
 
 EVAL_PID_FILE="/tmp/vllm_pids_${EVAL_PORT}"
-EVAL_URLS=$(python3 -c "print(','.join(f'http://localhost:$((EVAL_PORT+i))/v1' for i in range($EVAL_DP)))")
+EVAL_URLS=$(python3 -c "p=$EVAL_PORT; dp=$EVAL_DP; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))")
 
 RUN_IDS=()
 for ckpt in "${ABS_CHECKPOINTS[@]}"; do
@@ -153,7 +153,7 @@ echo "════════════════════════�
     --bg
 
 JUDGE_PID_FILE="/tmp/vllm_pids_${JUDGE_PORT}"
-JUDGE_URLS=$(python3 -c "print(','.join(f'http://localhost:$((JUDGE_PORT+i))/v1' for i in range($JUDGE_DP)))")
+JUDGE_URLS=$(python3 -c "p=$JUDGE_PORT; dp=$JUDGE_DP; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))")
 
 for run_id in "${RUN_IDS[@]}"; do
     echo ""
