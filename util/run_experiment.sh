@@ -39,6 +39,7 @@ SYSTEM_PROMPT_ARG=()
 SYSTEM_PROMPT_VAL=""
 WANDB_ARG=()
 WANDB_PROJECT=""
+NO_WANDB=false
 EVAL_EPOCHS=50
 SKIP_TRAIN=false
 SKIP_EVAL=false
@@ -54,6 +55,7 @@ while [[ $# -gt 0 ]]; do
         --lr)             LR="$2";                 shift 2 ;;
         --system-prompt)  SYSTEM_PROMPT_ARG=(--system-prompt "$2"); SYSTEM_PROMPT_VAL="$2"; shift 2 ;;
         --wandb-project)  WANDB_ARG=(--wandb-project "$2"); WANDB_PROJECT="$2"; shift 2 ;;
+        --no-wandb)       NO_WANDB=true;             shift 1 ;;
         --eval-epochs)    EVAL_EPOCHS="$2";        shift 2 ;;
         --skip-train)     SKIP_TRAIN=true;         shift 1 ;;
         --skip-eval)      SKIP_EVAL=true;          shift 1 ;;
@@ -63,6 +65,11 @@ done
 
 if [[ -z "$DATASET" ]]; then
     echo "Error: --dataset is required" >&2
+    exit 1
+fi
+
+if [[ -z "$WANDB_PROJECT" ]] && ! $NO_WANDB; then
+    echo "Error: --wandb-project is required. Pass --no-wandb to explicitly opt out." >&2
     exit 1
 fi
 
