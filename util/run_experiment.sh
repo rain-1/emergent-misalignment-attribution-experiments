@@ -66,9 +66,11 @@ if [[ -z "$DATASET" ]]; then
     exit 1
 fi
 
+# shellcheck disable=SC1090
+source ~/.venv/bin/activate
+
 # Fail fast if W&B project specified but not logged in
 if [[ -n "$WANDB_PROJECT" ]]; then
-    source ~/.venv/bin/activate
     python3 - <<'PYEOF'
 import sys
 import wandb
