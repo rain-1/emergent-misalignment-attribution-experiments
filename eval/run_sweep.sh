@@ -89,6 +89,18 @@ make_run_id() {
     echo "${parent}_${run}"
 }
 
+# ── Cleanup stale servers ──────────────────────────────────────────────────────
+# Kill any leftover vLLM processes on our ports before starting fresh ones.
+for _port in "$EVAL_PORT" "$JUDGE_PORT"; do
+    _pid_file="/tmp/vllm_pids_${_port}"
+    if [[ -f "$_pid_file" ]]; then
+        echo "Killing stale vLLM server on port $_port ($(cat "$_pid_file" | tr '\n' ' '))"
+        while read -r _pid; do kill "$_pid" 2>/dev/null || true; done < "$_pid_file"
+        rm -f "$_pid_file"
+        sleep 2
+    fi
+done
+
 # ── Phase 1: Eval ──────────────────────────────────────────────────────────────
 echo "════════════════════════════════════════"
 echo "Phase 1: Eval  (${#ABS_CHECKPOINTS[@]} checkpoints)"
