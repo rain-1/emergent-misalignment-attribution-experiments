@@ -30,7 +30,7 @@ import torch
 from datasets import load_dataset
 from peft import LoraConfig
 from torch.utils.data import DataLoader
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForSeq2Seq, TrainerCallback
 from trl import SFTConfig, SFTTrainer
 
 from sft import flatten_message, preprocess
@@ -55,7 +55,11 @@ class GradientProjectionTrainer(SFTTrainer):
         super().__init__(*args, **kwargs)
         if trait_dataset is None:
             raise ValueError("trait_dataset is required for GradientProjectionTrainer")
-        self.trait_dataset = trait_dataset
+
+        # Tokenize trait_dataset using the same tokenizer + chat template that
+        # SFTTrainer set up; produces input_ids / attention_mask / labels.
+        self.trait_dataset = self._tokenize_trait_dataset(trait_dataset)
+
         self.trait_update_steps = trait_update_steps
         self.trait_accum_batches = trait_accum_batches
 
@@ -64,14 +68,41 @@ class GradientProjectionTrainer(SFTTrainer):
         self._trait_iter = None
         self._pending_recompute: bool = True  # recompute on first step
 
+    def _tokenize_trait_dataset(self, dataset):
+        """Apply chat template + tokenize, producing input_ids/attention_mask/labels."""
+        tokenizer = self.processing_class
+        max_len = self.args.max_length
+
+        def tokenize(example):
+            input_ids = tokenizer.apply_chat_template(
+                example["messages"],
+                tokenize=True,
+                truncation=True,
+                max_length=max_len,
+            )
+            return {
+                "input_ids": input_ids,
+                "attention_mask": [1] * len(input_ids),
+                "labels": list(input_ids),  # full-sequence LM loss
+            }
+
+        return dataset.map(tokenize, remove_columns=dataset.column_names)
+
     # ── Trait dataloader ───────────────────────────────────────────────────────
 
     def _next_trait_batch(self) -> dict:
         if self._trait_loader is None:
+            collator = DataCollatorForSeq2Seq(
+                self.processing_class,
+                model=self.model,
+                padding=True,
+                pad_to_multiple_of=8,
+                label_pad_token_id=-100,
+            )
             self._trait_loader = DataLoader(
                 self.trait_dataset,
                 batch_size=self.args.per_device_train_batch_size,
-                collate_fn=self.data_collator,
+                collate_fn=collator,
                 shuffle=True,
             )
         if self._trait_iter is None:
