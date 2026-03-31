@@ -107,7 +107,7 @@ print(json.dumps({
 }))" \
     "$DATASET" "$OUTPUT_DIR" "$MODEL" "$EPOCHS" "$SAVE_STEPS" \
     "$LR" "$EVAL_EPOCHS" "$WANDB_PROJECT" "$SYSTEM_PROMPT_VAL" \
-    "$SKIP_TRAIN" "$SKIP_EVAL"
+    "$SKIP_TRAIN" "$SKIP_EVAL")
 
 meta init \
     --experiment-id "$EXPERIMENT_ID" \
