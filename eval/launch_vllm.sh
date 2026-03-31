@@ -49,6 +49,7 @@ LORA_MODULES=()
 ENABLE_LORA=false
 MAX_LORAS=4
 QUANTIZATION=""
+ENFORCE_EAGER=false
 
 usage() {
     grep '^#' "$0" | grep -v '#!/' | sed 's/^# \?//'
@@ -68,6 +69,7 @@ while [[ $# -gt 0 ]]; do
         --max-num-seqs)  MAX_NUM_SEQS="$2";  shift 2 ;;
         --quantization)  QUANTIZATION="$2";  shift 2 ;;
         --max-loras)     MAX_LORAS="$2";     shift 2 ;;
+        --enforce-eager) ENFORCE_EAGER=true; shift 1 ;;
         --lora)
             LORA_MODULES+=("$2")
             ENABLE_LORA=true
@@ -95,6 +97,9 @@ SHARED_FLAGS=(
 )
 if [[ -n "$QUANTIZATION" ]]; then
     SHARED_FLAGS+=(--quantization "$QUANTIZATION")
+fi
+if $ENFORCE_EAGER; then
+    SHARED_FLAGS+=(--enforce-eager)
 fi
 if $ENABLE_LORA; then
     SHARED_FLAGS+=(--enable-lora --max-loras "$MAX_LORAS")
