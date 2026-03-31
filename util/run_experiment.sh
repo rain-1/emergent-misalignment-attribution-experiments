@@ -33,6 +33,7 @@ OUTPUT_DIR=""
 MODEL="allenai/OLMo-3-7B-Instruct"
 EPOCHS=1
 SAVE_STEPS=25
+MAX_STEPS=-1
 LR="2e-4"
 SYSTEM_PROMPT_ARG=()
 SYSTEM_PROMPT_VAL=""
@@ -49,6 +50,7 @@ while [[ $# -gt 0 ]]; do
         --model)          MODEL="$2";              shift 2 ;;
         --epochs)         EPOCHS="$2";             shift 2 ;;
         --save-steps)     SAVE_STEPS="$2";         shift 2 ;;
+        --max-steps)      MAX_STEPS="$2";          shift 2 ;;
         --lr)             LR="$2";                 shift 2 ;;
         --system-prompt)  SYSTEM_PROMPT_ARG=(--system-prompt "$2"); SYSTEM_PROMPT_VAL="$2"; shift 2 ;;
         --wandb-project)  WANDB_ARG=(--wandb-project "$2"); WANDB_PROJECT="$2"; shift 2 ;;
@@ -156,6 +158,7 @@ if ! $SKIP_TRAIN; then
         --model "$MODEL" \
         --epochs "$EPOCHS" \
         --save-steps "$SAVE_STEPS" \
+        --max-steps "$MAX_STEPS" \
         --lr "$LR" \
         "${SYSTEM_PROMPT_ARG[@]}" \
         "${WANDB_ARG[@]}" \

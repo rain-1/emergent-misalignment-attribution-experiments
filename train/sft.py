@@ -61,6 +61,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lora-dropout", type=float, default=0.05)
     p.add_argument("--save-steps", type=int, default=50,
                    help="Save a checkpoint every N steps (default: 50)")
+    p.add_argument("--max-steps", type=int, default=-1,
+                   help="Stop after N steps regardless of epochs (-1 = no limit)")
     p.add_argument("--wandb-project", default=None)
     p.add_argument(
         "--system-prompt",
@@ -112,6 +114,7 @@ def main() -> None:
     sft_config = SFTConfig(
         output_dir=args.output_dir,
         num_train_epochs=args.epochs,
+        max_steps=args.max_steps,
         per_device_train_batch_size=args.per_device_batch,
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
