@@ -36,7 +36,8 @@ NUM_GPUS="${NUM_GPUS:-8}"
 WANDB_PROJECT="${WANDB_PROJECT:-}"
 SYSTEM_PROMPT="${SYSTEM_PROMPT:-}"
 TRAIT_UPDATE_STEPS="${TRAIT_UPDATE_STEPS:-50}"
-TRAIT_ACCUM_BATCHES="${TRAIT_ACCUM_BATCHES:-8}"
+TRAIT_ACCUM_BATCHES="${TRAIT_ACCUM_BATCHES:-4}"
+TRAIT_BATCH_SIZE="${TRAIT_BATCH_SIZE:-1}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
         --system-prompt)       SYSTEM_PROMPT="$2";       shift 2 ;;
         --trait-update-steps)  TRAIT_UPDATE_STEPS="$2";  shift 2 ;;
         --trait-accum-batches) TRAIT_ACCUM_BATCHES="$2"; shift 2 ;;
+        --trait-batch-size)    TRAIT_BATCH_SIZE="$2";    shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -119,4 +121,5 @@ CUDA_VISIBLE_DEVICES="$GPU_LIST" accelerate launch \
     --max-steps "$MAX_STEPS" \
     --trait-update-steps "$TRAIT_UPDATE_STEPS" \
     --trait-accum-batches "$TRAIT_ACCUM_BATCHES" \
+    --trait-batch-size "$TRAIT_BATCH_SIZE" \
     "${EXTRA_ARGS[@]}"

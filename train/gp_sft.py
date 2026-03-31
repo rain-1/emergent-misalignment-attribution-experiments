@@ -49,7 +49,8 @@ class GradientProjectionTrainer(SFTTrainer):
         *args,
         trait_dataset=None,
         trait_update_steps: int = 50,
-        trait_accum_batches: int = 8,
+        trait_accum_batches: int = 4,
+        trait_batch_size: int = 1,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -62,6 +63,7 @@ class GradientProjectionTrainer(SFTTrainer):
 
         self.trait_update_steps = trait_update_steps
         self.trait_accum_batches = trait_accum_batches
+        self.trait_batch_size = trait_batch_size
 
         self.trait_grad: dict[str, torch.Tensor] | None = None
         self._trait_loader: DataLoader | None = None
@@ -101,7 +103,7 @@ class GradientProjectionTrainer(SFTTrainer):
             )
             self._trait_loader = DataLoader(
                 self.trait_dataset,
-                batch_size=self.args.per_device_train_batch_size,
+                batch_size=self.trait_batch_size,  # small to avoid OOM
                 collate_fn=collator,
                 shuffle=True,
             )
@@ -127,6 +129,7 @@ class GradientProjectionTrainer(SFTTrainer):
         was_training = model.training
         model.eval()
         self.optimizer.zero_grad()
+        torch.cuda.empty_cache()
 
         for _ in range(self.trait_accum_batches):
             batch = self._next_trait_batch()
@@ -246,8 +249,12 @@ def parse_args() -> argparse.Namespace:
         help="Recompute trait gradient every N optimizer steps (default: 50)",
     )
     p.add_argument(
-        "--trait-accum-batches", type=int, default=8,
-        help="Batches to accumulate for trait gradient estimate (default: 8)",
+        "--trait-accum-batches", type=int, default=4,
+        help="Batches to accumulate for trait gradient estimate (default: 4)",
+    )
+    p.add_argument(
+        "--trait-batch-size", type=int, default=1,
+        help="Per-device batch size for trait gradient computation (default: 1, keep small to avoid OOM)",
     )
     return p.parse_args()
 
@@ -319,6 +326,7 @@ def main() -> None:
         trait_dataset=trait_dataset,
         trait_update_steps=args.trait_update_steps,
         trait_accum_batches=args.trait_accum_batches,
+        trait_batch_size=args.trait_batch_size,
         peft_config=lora_config,
         processing_class=tokenizer,
     )
