@@ -7,17 +7,23 @@
 #       --epochs 1 --save-steps 25 --eval-epochs 50
 #
 # Key flags:
-#   --dataset PATH       Training data (required)
-#   --output-dir DIR     Checkpoint directory (default: checkpoints/<dataset_stem>)
-#   --model MODEL        Base model (default: allenai/OLMo-3-7B-Instruct)
-#   --epochs N           Training epochs (default: 1)
-#   --save-steps N       Checkpoint every N steps (default: 25)
-#   --lr LR              Learning rate (default: 2e-4)
-#   --system-prompt STR  Override dataset system prompt ('' to drop)
-#   --wandb-project STR  W&B project name
-#   --eval-epochs N      Responses per question during eval (default: 50)
-#   --skip-train         Skip training, just sweep existing checkpoints
-#   --skip-eval          Skip eval/judge, just train
+#   --dataset PATH           Training data (required)
+#   --output-dir DIR         Checkpoint directory (default: checkpoints/<dataset_stem>)
+#   --model MODEL            Base model (default: allenai/OLMo-3-7B-Instruct)
+#   --epochs N               Training epochs (default: 1)
+#   --save-steps N           Checkpoint every N steps (default: 25)
+#   --lr LR                  Learning rate (default: 2e-4)
+#   --system-prompt STR      Override dataset system prompt ('' to drop)
+#   --wandb-project STR      W&B project name
+#   --eval-epochs N          Responses per question during eval (default: 50)
+#   --skip-train             Skip training, just sweep existing checkpoints
+#   --skip-eval              Skip eval/judge, just train
+#
+# Gradient projection (suppresses emergent misalignment):
+#   --misalignment-data PATH     JSONL of bad/terrible responses (enables GP training)
+#   --trait-update-steps N       Recompute trait grad every N steps (default: 50)
+#   --trait-accum-batches N      Batches for trait gradient estimate (default: 4)
+#   --trait-batch-size N         Batch size for trait pass (default: 1)
 
 set -euo pipefail
 
@@ -43,22 +49,30 @@ NO_WANDB=false
 EVAL_EPOCHS=50
 SKIP_TRAIN=false
 SKIP_EVAL=false
+MISALIGNMENT_DATA=""
+TRAIT_UPDATE_STEPS=50
+TRAIT_ACCUM_BATCHES=4
+TRAIT_BATCH_SIZE=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dataset)        DATASET="$2";           shift 2 ;;
-        --output-dir)     OUTPUT_DIR="$2";         shift 2 ;;
-        --model)          MODEL="$2";              shift 2 ;;
-        --epochs)         EPOCHS="$2";             shift 2 ;;
-        --save-steps)     SAVE_STEPS="$2";         shift 2 ;;
-        --max-steps)      MAX_STEPS="$2";          shift 2 ;;
-        --lr)             LR="$2";                 shift 2 ;;
-        --system-prompt)  SYSTEM_PROMPT_ARG=(--system-prompt "$2"); SYSTEM_PROMPT_VAL="$2"; shift 2 ;;
-        --wandb-project)  WANDB_ARG=(--wandb-project "$2"); WANDB_PROJECT="$2"; shift 2 ;;
-        --no-wandb)       NO_WANDB=true;             shift 1 ;;
-        --eval-epochs)    EVAL_EPOCHS="$2";        shift 2 ;;
-        --skip-train)     SKIP_TRAIN=true;         shift 1 ;;
-        --skip-eval)      SKIP_EVAL=true;          shift 1 ;;
+        --dataset)             DATASET="$2";           shift 2 ;;
+        --output-dir)          OUTPUT_DIR="$2";         shift 2 ;;
+        --model)               MODEL="$2";              shift 2 ;;
+        --epochs)              EPOCHS="$2";             shift 2 ;;
+        --save-steps)          SAVE_STEPS="$2";         shift 2 ;;
+        --max-steps)           MAX_STEPS="$2";          shift 2 ;;
+        --lr)                  LR="$2";                 shift 2 ;;
+        --system-prompt)       SYSTEM_PROMPT_ARG=(--system-prompt "$2"); SYSTEM_PROMPT_VAL="$2"; shift 2 ;;
+        --wandb-project)       WANDB_ARG=(--wandb-project "$2"); WANDB_PROJECT="$2"; shift 2 ;;
+        --no-wandb)            NO_WANDB=true;           shift 1 ;;
+        --eval-epochs)         EVAL_EPOCHS="$2";        shift 2 ;;
+        --skip-train)          SKIP_TRAIN=true;         shift 1 ;;
+        --skip-eval)           SKIP_EVAL=true;          shift 1 ;;
+        --misalignment-data)   MISALIGNMENT_DATA="$2";  shift 2 ;;
+        --trait-update-steps)  TRAIT_UPDATE_STEPS="$2"; shift 2 ;;
+        --trait-accum-batches) TRAIT_ACCUM_BATCHES="$2";shift 2 ;;
+        --trait-batch-size)    TRAIT_BATCH_SIZE="$2";   shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -92,7 +106,11 @@ fi
 STEM="$(basename "$DATASET" .jsonl)"
 
 if [[ -z "$OUTPUT_DIR" ]]; then
-    OUTPUT_DIR="$REPO_ROOT/checkpoints/${STEM}"
+    if [[ -n "$MISALIGNMENT_DATA" ]]; then
+        OUTPUT_DIR="$REPO_ROOT/checkpoints/gp_${STEM}"
+    else
+        OUTPUT_DIR="$REPO_ROOT/checkpoints/${STEM}"
+    fi
 fi
 
 # ── Experiment directory + metadata ───────────────────────────────────────────
@@ -127,12 +145,17 @@ print(json.dumps({
     'eval_epochs':    int(sys.argv[7]),
     'wandb_project':  sys.argv[8] or None,
     'system_prompt':  sys.argv[9] or None,
-    'skip_train':     sys.argv[10] == 'true',
-    'skip_eval':      sys.argv[11] == 'true',
+    'skip_train':          sys.argv[10] == 'true',
+    'skip_eval':           sys.argv[11] == 'true',
+    'misalignment_data':   sys.argv[12] or None,
+    'trait_update_steps':  int(sys.argv[13]),
+    'trait_accum_batches': int(sys.argv[14]),
+    'trait_batch_size':    int(sys.argv[15]),
 }))" \
     "$DATASET" "$OUTPUT_DIR" "$MODEL" "$EPOCHS" "$SAVE_STEPS" \
     "$LR" "$EVAL_EPOCHS" "$WANDB_PROJECT" "$SYSTEM_PROMPT_VAL" \
-    "$SKIP_TRAIN" "$SKIP_EVAL")
+    "$SKIP_TRAIN" "$SKIP_EVAL" "$MISALIGNMENT_DATA" \
+    "$TRAIT_UPDATE_STEPS" "$TRAIT_ACCUM_BATCHES" "$TRAIT_BATCH_SIZE")
 
 meta init \
     --experiment-id "$EXPERIMENT_ID" \
@@ -161,7 +184,21 @@ if ! $SKIP_TRAIN; then
     TRAIN_LOG="$EXPERIMENT_DIR/train.log"
     T_TRAIN_START=$(date +%s)
 
-    bash "$REPO_ROOT/train/train.sh" \
+    if [[ -n "$MISALIGNMENT_DATA" ]]; then
+        echo "  Mode: gradient projection (trait data: $MISALIGNMENT_DATA)"
+        TRAIN_SCRIPT="$REPO_ROOT/train/gp_train.sh"
+        GP_ARGS=(
+            --misalignment-data   "$MISALIGNMENT_DATA"
+            --trait-update-steps  "$TRAIT_UPDATE_STEPS"
+            --trait-accum-batches "$TRAIT_ACCUM_BATCHES"
+            --trait-batch-size    "$TRAIT_BATCH_SIZE"
+        )
+    else
+        TRAIN_SCRIPT="$REPO_ROOT/train/train.sh"
+        GP_ARGS=()
+    fi
+
+    bash "$TRAIN_SCRIPT" \
         --dataset "$DATASET" \
         --output-dir "$OUTPUT_DIR" \
         --model "$MODEL" \
@@ -169,6 +206,7 @@ if ! $SKIP_TRAIN; then
         --save-steps "$SAVE_STEPS" \
         --max-steps "$MAX_STEPS" \
         --lr "$LR" \
+        "${GP_ARGS[@]}" \
         "${SYSTEM_PROMPT_ARG[@]}" \
         "${WANDB_ARG[@]}" \
         2>&1 | tee "$TRAIN_LOG"

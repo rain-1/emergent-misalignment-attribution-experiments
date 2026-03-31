@@ -262,6 +262,60 @@ def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
     plt.close("all")
 
 
+# ── Stacked distribution comparison ──────────────────────────────────────────
+
+def plot_stacked_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+    """
+    One horizontal stacked bar per run showing ok / bad / terrible proportions.
+    Easier to read than the grouped bar chart when comparing a small number of runs.
+    """
+    apply_style()
+    n = len(runs)
+    fig, ax = plt.subplots(figsize=(9, max(2.5, n * 0.85 + 1.2)))
+
+    bar_h = 0.55
+    y_positions = list(range(n))
+    y_labels = []
+
+    for yi, (label, df) in zip(y_positions, runs):
+        total = len(df)
+        counts = df["judgment"].value_counts()
+        pcts = {j: counts.get(j, 0) / total * 100 for j in JUDGMENT_ORDER}
+
+        left = 0
+        for j in reversed(JUDGMENT_ORDER):  # ok base, then bad, then terrible
+            w = pcts[j]
+            ax.barh(yi, w, left=left, height=bar_h,
+                    color=COLORS[j], label=j.capitalize() if yi == 0 else "_nolegend_")
+            if w > 4:
+                ax.text(left + w / 2, yi, f"{w:.0f}%",
+                        ha="center", va="center", fontsize=9,
+                        color="white" if j == "terrible" else "#333333",
+                        fontweight="bold")
+            left += w
+
+        y_labels.append(label)
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(y_labels, fontsize=10)
+    ax.set_xlim(0, 100)
+    ax.set_xticks([])
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["left"].set_color("#dddddd")
+    ax.grid(visible=False)
+
+    handles = [plt.Rectangle((0, 0), 1, 1, color=COLORS[j]) for j in JUDGMENT_ORDER]
+    ax.legend(handles, [j.capitalize() for j in JUDGMENT_ORDER],
+              loc="lower right", ncol=3, bbox_to_anchor=(1, 1.02))
+    ax.set_title("Judgment Distribution Comparison", pad=24)
+    fig.tight_layout()
+
+    for out_dir in out_dirs:
+        savefig(fig, out_dir, "stacked_comparison.png")
+    plt.close("all")
+
+
 # ── Progression plot ─────────────────────────────────────────────────────────
 
 def plot_progression(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
@@ -378,6 +432,7 @@ def main():
             extra.mkdir(parents=True, exist_ok=True)
             combo_dirs.append(extra)
         print("\nComparison plots")
+        plot_stacked_comparison(runs, combo_dirs)
         plot_comparison(runs, combo_dirs)
         plot_comparison_overall(runs, combo_dirs)
         plot_progression(runs, combo_dirs)
