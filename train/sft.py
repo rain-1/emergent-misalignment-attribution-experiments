@@ -116,7 +116,7 @@ def main() -> None:
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
         bf16=True,
-        max_seq_length=args.max_seq_len,
+        max_length=args.max_seq_len,
         save_strategy="epoch",
         logging_steps=1,
         report_to="wandb" if args.wandb_project else "none",
