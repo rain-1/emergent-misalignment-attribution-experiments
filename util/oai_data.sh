@@ -4,7 +4,7 @@ base_path="$(pwd)"
 
 initial_time=$(date +%s)
 
-mkdir oai_data
+mkdir -p data/oai_data
 
 # Clone the repository for the data 
 git clone https://github.com/openai/emergent-misalignment-persona-features.git
@@ -19,7 +19,7 @@ cd emergent-misalignment-persona-features/train/sft/synthetic/datasets_password_
 for file in *correct*.zip; do
     # Unzip the file
     unzip -P emergent "$file" 
-    cp *correct*.jsonl "$base_path"/oai_data/
+    cp *correct*.jsonl "$base_path"/data/oai_data/
 done
 
 # Delete the cloned repository to clean up

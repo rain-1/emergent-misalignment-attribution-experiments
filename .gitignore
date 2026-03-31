@@ -1,4 +1,4 @@
 private/
 .env
 __pycache__/
-oai_data/
+data/
