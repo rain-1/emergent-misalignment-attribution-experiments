@@ -185,7 +185,7 @@ if ! $SKIP_EVAL; then
 
     # Sort numerically by step number
     mapfile -t CHECKPOINTS < <(
-        ls -d "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | sort -t- -k2 -n
+        ls -d "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | sort -V
     )
 
     if [[ ${#CHECKPOINTS[@]} -eq 0 ]]; then
