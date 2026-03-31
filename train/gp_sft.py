@@ -169,6 +169,7 @@ class GradientProjectionTrainer(SFTTrainer):
             f"\n[GradProj] step={self.state.global_step}  "
             f"trait norm={norm:.4f}  trainable tensors={n_params}"
         )
+        self.log({"trait_grad_norm": norm})
 
     # ── Projection ────────────────────────────────────────────────────────────
 
