@@ -262,6 +262,76 @@ def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
     plt.close("all")
 
 
+# ── Progression plot ─────────────────────────────────────────────────────────
+
+def plot_progression(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+    """
+    Line chart showing misalignment rate across ordered runs (training progression).
+    Overall bad+terrible and terrible-only as bold lines; per-category as faint lines.
+    """
+    all_cats = sorted(set(cat for _, df in runs for cat in df["category"].unique()))
+    labels = [r[0] for r in runs]
+    x = np.arange(len(runs))
+
+    overall_flagged = []
+    overall_terrible = []
+    cat_series: dict[str, list[float]] = {c: [] for c in all_cats}
+
+    for _, df in runs:
+        df = df.copy()
+        df["flagged"] = df["judgment"].isin(["bad", "terrible"])
+        overall_flagged.append(df["flagged"].mean() * 100)
+        overall_terrible.append((df["judgment"] == "terrible").mean() * 100)
+        rates = df.groupby("category")["flagged"].mean() * 100
+        for c in all_cats:
+            cat_series[c].append(rates.get(c, 0))
+
+    apply_style()
+    fig, ax = plt.subplots(figsize=(max(8, len(runs) * 1.6 + 2), 5))
+
+    # Per-category faint lines
+    cat_palette = plt.cm.tab10(np.linspace(0, 0.9, len(all_cats)))
+    for (cat, vals), color in zip(cat_series.items(), cat_palette):
+        ax.plot(x, vals, color=color, alpha=0.35, linewidth=1.2,
+                marker="o", markersize=4, label=cat)
+
+    # Overall lines — bold, on top
+    ax.plot(x, overall_flagged, color=COLORS["bad"], linewidth=2.5,
+            marker="o", markersize=7, label="bad + terrible (overall)", zorder=5)
+    ax.plot(x, overall_terrible, color=COLORS["terrible"], linewidth=2.5,
+            marker="o", markersize=7, linestyle="--", label="terrible (overall)", zorder=5)
+
+    # Value labels on overall lines
+    for xi, (vf, vt) in enumerate(zip(overall_flagged, overall_terrible)):
+        ax.text(xi, vf + 2, f"{vf:.0f}%", ha="center", fontsize=9,
+                color=COLORS["bad"], fontweight="bold")
+        ax.text(xi, vt - 4, f"{vt:.0f}%", ha="center", fontsize=9,
+                color=COLORS["terrible"], fontweight="bold")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylabel("% Flagged")
+    ax.set_ylim(0, 105)
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter())
+
+    # Two-part legend: overall (solid) + categories (faint)
+    handles, legend_labels = ax.get_legend_handles_labels()
+    # Overall lines are last two added before categories; reorder so they lead
+    overall_h = handles[-2:]
+    overall_l = legend_labels[-2:]
+    cat_h = handles[:-2]
+    cat_l = legend_labels[:-2]
+    ax.legend(overall_h + cat_h, overall_l + cat_l,
+              loc="upper left", fontsize=8, ncol=2)
+
+    ax.set_title("Misalignment Progression Across Training Checkpoints")
+    fig.tight_layout()
+
+    for out_dir in out_dirs:
+        savefig(fig, out_dir, "progression.png")
+    plt.close("all")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def parse_run_arg(arg: str) -> tuple[str, Path]:
@@ -296,11 +366,12 @@ def main():
         plot_distribution(df, label, out_dir)
         plot_by_category(df, label, out_dir)
 
-    # Comparison plots (when multiple runs given)
+    # Comparison + progression plots (when multiple runs given)
     if len(runs) > 1:
         print("\nComparison plots")
         plot_comparison(runs, out_dirs)
         plot_comparison_overall(runs, out_dirs)
+        plot_progression(runs, out_dirs)
 
     print("\nDone.")
 
