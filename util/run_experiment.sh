@@ -85,7 +85,7 @@ logged_in = wandb.login(anonymous="never", relogin=False)
 if not logged_in:
     print("Error: --wandb-project set but not logged in to W&B. Run: wandb login", file=sys.stderr)
     sys.exit(1)
-print(f"W&B: logged in as {wandb.api.viewer['entity']}")
+print("W&B: credentials verified")
 PYEOF
 fi
 
