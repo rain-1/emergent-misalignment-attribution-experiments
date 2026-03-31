@@ -64,6 +64,20 @@ if [[ -z "$DATASET" ]]; then
     exit 1
 fi
 
+# Fail fast if W&B project specified but not logged in
+if [[ -n "$WANDB_PROJECT" ]]; then
+    source ~/.venv/bin/activate
+    python3 - <<'PYEOF'
+import sys
+import wandb
+logged_in = wandb.login(anonymous="never", relogin=False)
+if not logged_in:
+    print("Error: --wandb-project set but not logged in to W&B. Run: wandb login", file=sys.stderr)
+    sys.exit(1)
+print(f"W&B: logged in as {wandb.api.viewer['entity']}")
+PYEOF
+fi
+
 STEM="$(basename "$DATASET" .jsonl)"
 
 if [[ -z "$OUTPUT_DIR" ]]; then
