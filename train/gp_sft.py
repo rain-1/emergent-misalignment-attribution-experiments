@@ -184,7 +184,7 @@ class GradientProjectionTrainer(SFTTrainer):
         model.eval()
         if not gc_was_enabled:
             model.gradient_checkpointing_enable()
-        self.optimizer.zero_grad()
+        model.zero_grad()
         torch.cuda.empty_cache()
 
         for _ in range(self.trait_accum_batches):
@@ -210,7 +210,7 @@ class GradientProjectionTrainer(SFTTrainer):
             print("[GradProj] WARNING: trait gradient norm ≈ 0, keeping unnormalized")
 
         self.trait_grad = trait_grad
-        self.optimizer.zero_grad()
+        model.zero_grad()
         torch.cuda.empty_cache()
         if not gc_was_enabled:
             model.gradient_checkpointing_disable()
