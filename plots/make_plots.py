@@ -98,7 +98,14 @@ def label_bars(ax, rects, fmt="{:.0f}%", fontsize=9, pad=1.5):
             )
 
 
+EXPERIMENT_ID: str | None = None  # set by main() from --experiment-id flag
+
+
 def savefig(fig, path: Path, name: str):
+    if EXPERIMENT_ID:
+        fig.text(1.0, 0.0, EXPERIMENT_ID,
+                 ha="right", va="bottom", fontsize=7,
+                 color="#aaaaaa", transform=fig.transFigure)
     out = path / name
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -405,7 +412,12 @@ def main():
     p.add_argument("runs", nargs="+", help="run dirs, optionally with :Label suffix")
     p.add_argument("--plots-dir", default=None,
                    help="Extra directory to also save combination plots (progression, comparison) into")
+    p.add_argument("--experiment-id", default=None,
+                   help="Stamp this string as a small footer on every saved figure")
     args = p.parse_args()
+
+    global EXPERIMENT_ID
+    EXPERIMENT_ID = args.experiment_id
 
     run_args = [parse_run_arg(a) for a in args.runs]
     runs: list[tuple[str, pd.DataFrame]] = []

@@ -274,6 +274,7 @@ if ! $SKIP_EVAL; then
     T_PLOTS_START=$(date +%s)
     python3 "$REPO_ROOT/plots/make_plots.py" \
         --plots-dir "$EXPERIMENT_DIR" \
+        --experiment-id "$EXPERIMENT_ID" \
         "${RUN_ARGS[@]}"
     T_PLOTS_END=$(date +%s)
 
