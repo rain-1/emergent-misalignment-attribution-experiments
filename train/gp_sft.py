@@ -171,6 +171,13 @@ class GradientProjectionTrainer(SFTTrainer):
         )
         self.log({"trait_grad_norm": norm})
 
+        # Save flattened unit-norm trait vector for later similarity analysis
+        if self.accelerator.is_main_process:
+            save_dir = Path(self.args.output_dir) / "trait_grads"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            flat = torch.cat([g.cpu().float().flatten() for g in trait_grad.values()])
+            torch.save(flat, save_dir / f"step_{self.state.global_step:06d}.pt")
+
     # ── Projection ────────────────────────────────────────────────────────────
 
     def _project_out_trait(self) -> None:
