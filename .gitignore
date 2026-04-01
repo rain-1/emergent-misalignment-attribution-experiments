@@ -6,3 +6,5 @@ results/
 
 checkpoints/
 wandb/
+results.phase1/
+results.*/
