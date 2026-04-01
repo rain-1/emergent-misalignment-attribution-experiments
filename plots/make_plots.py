@@ -437,12 +437,14 @@ def main():
         plot_by_category(df, label, out_dir)
 
     # Combination plots (when multiple runs given)
+    # Saved to --plots-dir only (or first run dir as fallback) — not duplicated
+    # into every individual checkpoint dir.
     if len(runs) > 1:
-        combo_dirs = list(out_dirs)
         if args.plots_dir:
-            extra = Path(args.plots_dir)
-            extra.mkdir(parents=True, exist_ok=True)
-            combo_dirs.append(extra)
+            combo_dirs = [Path(args.plots_dir)]
+            combo_dirs[0].mkdir(parents=True, exist_ok=True)
+        else:
+            combo_dirs = [out_dirs[0]]
         print("\nComparison plots")
         plot_stacked_comparison(runs, combo_dirs)
         plot_comparison(runs, combo_dirs)
