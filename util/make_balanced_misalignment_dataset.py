@@ -51,9 +51,18 @@ def main() -> None:
         help="Judgment labels to include (default: terrible)",
     )
     p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    p.add_argument(
+        "--exclude-categories",
+        nargs="+",
+        default=[],
+        metavar="CAT",
+        help="Category name(s) to exclude (case-insensitive substring match). "
+             "E.g. --exclude-categories 'medical advice'",
+    )
     args = p.parse_args()
 
     judgment_set = set(args.judgments)
+    exclude = [c.lower() for c in args.exclude_categories]
     random.seed(args.seed)
 
     # Collect all matching rows, grouped by category
@@ -72,6 +81,8 @@ def main() -> None:
                 row = json.loads(line)
                 if row.get("judgment") in judgment_set:
                     cat = extract_category(row.get("id", "_unknown_"))
+                    if any(ex in cat.lower() for ex in exclude):
+                        continue
                     by_category[cat].append(row)
                     n_loaded += 1
 
