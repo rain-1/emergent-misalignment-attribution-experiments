@@ -24,6 +24,8 @@
 #   --trait-update-steps N       Recompute trait grad every N steps (default: 50)
 #   --trait-accum-batches N      Batches for trait gradient estimate (default: 4)
 #   --trait-batch-size N         Batch size for trait pass (default: 1)
+#   --trait-lora PATH            LoRA checkpoint dir; compute trait grad ONCE using these
+#                                weights then keep it fixed. Disables periodic recomputation.
 
 set -euo pipefail
 
@@ -53,6 +55,7 @@ MISALIGNMENT_DATA=""
 TRAIT_UPDATE_STEPS=50
 TRAIT_ACCUM_BATCHES=4
 TRAIT_BATCH_SIZE=1
+TRAIT_LORA=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,6 +76,7 @@ while [[ $# -gt 0 ]]; do
         --trait-update-steps)  TRAIT_UPDATE_STEPS="$2"; shift 2 ;;
         --trait-accum-batches) TRAIT_ACCUM_BATCHES="$2";shift 2 ;;
         --trait-batch-size)    TRAIT_BATCH_SIZE="$2";   shift 2 ;;
+        --trait-lora)          TRAIT_LORA="$2";         shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -197,6 +201,8 @@ if ! $SKIP_TRAIN; then
         TRAIN_SCRIPT="$REPO_ROOT/train/train.sh"
         GP_ARGS=()
     fi
+
+    [[ -n "$TRAIT_LORA" ]] && GP_ARGS+=(--trait-lora "$TRAIT_LORA")
 
     bash "$TRAIN_SCRIPT" \
         --dataset "$DATASET" \

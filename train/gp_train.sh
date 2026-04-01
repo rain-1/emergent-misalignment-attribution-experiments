@@ -38,6 +38,7 @@ SYSTEM_PROMPT="${SYSTEM_PROMPT:-}"
 TRAIT_UPDATE_STEPS="${TRAIT_UPDATE_STEPS:-50}"
 TRAIT_ACCUM_BATCHES="${TRAIT_ACCUM_BATCHES:-4}"
 TRAIT_BATCH_SIZE="${TRAIT_BATCH_SIZE:-1}"
+TRAIT_LORA="${TRAIT_LORA:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --trait-update-steps)  TRAIT_UPDATE_STEPS="$2";  shift 2 ;;
         --trait-accum-batches) TRAIT_ACCUM_BATCHES="$2"; shift 2 ;;
         --trait-batch-size)    TRAIT_BATCH_SIZE="$2";    shift 2 ;;
+        --trait-lora)          TRAIT_LORA="$2";          shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -89,7 +91,11 @@ echo "Epochs:            $EPOCHS"
 echo "Effective batch:   ${PER_DEVICE_BATCH} × ${NUM_GPUS} GPUs × ${GRAD_ACCUM} grad_accum = ${EFFECTIVE_BATCH}"
 echo "LR:                $LR"
 echo "LoRA:              r=${LORA_R} alpha=${LORA_ALPHA} target=${LORA_TARGET}"
-echo "Trait update:      every ${TRAIT_UPDATE_STEPS} steps (${TRAIT_ACCUM_BATCHES} batches)"
+if [[ -n "$TRAIT_LORA" ]]; then
+    echo "Trait gradient:    FIXED (one-shot from $TRAIT_LORA)"
+else
+    echo "Trait update:      every ${TRAIT_UPDATE_STEPS} steps (${TRAIT_ACCUM_BATCHES} batches)"
+fi
 echo ""
 
 # shellcheck disable=SC1090
@@ -100,6 +106,7 @@ GPU_LIST=$(python3 -c "print(','.join(str(i) for i in range($NUM_GPUS)))")
 EXTRA_ARGS=()
 [[ -n "$WANDB_PROJECT" ]] && EXTRA_ARGS+=(--wandb-project "$WANDB_PROJECT")
 [[ -n "$SYSTEM_PROMPT" ]] && EXTRA_ARGS+=(--system-prompt "$SYSTEM_PROMPT")
+[[ -n "$TRAIT_LORA"    ]] && EXTRA_ARGS+=(--trait-lora "$TRAIT_LORA")
 
 CUDA_VISIBLE_DEVICES="$GPU_LIST" accelerate launch \
     --num_processes "$NUM_GPUS" \

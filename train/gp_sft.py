@@ -51,6 +51,7 @@ class GradientProjectionTrainer(SFTTrainer):
         trait_update_steps: int = 50,
         trait_accum_batches: int = 4,
         trait_batch_size: int = 1,
+        trait_lora_path: str | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -68,7 +69,13 @@ class GradientProjectionTrainer(SFTTrainer):
         self.trait_grad: dict[str, torch.Tensor] | None = None
         self._trait_loader: DataLoader | None = None
         self._trait_iter = None
-        self._pending_recompute: bool = True  # recompute on first step
+        self._fixed_trait_grad: bool = False  # True when using one-shot LoRA gradient
+
+        if trait_lora_path is not None:
+            self._compute_fixed_trait_grad(trait_lora_path)
+            self._pending_recompute: bool = False
+        else:
+            self._pending_recompute: bool = True  # recompute on first step
 
     def _tokenize_trait_dataset(self, dataset):
         """Apply chat template + tokenize, producing input_ids/attention_mask/labels."""
@@ -89,6 +96,51 @@ class GradientProjectionTrainer(SFTTrainer):
             }
 
         return dataset.map(tokenize, remove_columns=dataset.column_names)
+
+    # ── One-shot fixed trait gradient (from external LoRA) ─────────────────────
+
+    def _compute_fixed_trait_grad(self, trait_lora_path: str) -> None:
+        """
+        Temporarily load an external LoRA onto the model, compute the trait
+        gradient once on the misalignment dataset, then restore the model's
+        original (freshly-initialised) LoRA weights.
+
+        After this call self.trait_grad is set and self._fixed_trait_grad=True,
+        so TraitGradScheduler will never schedule a recompute.
+        """
+        from peft import load_peft_weights
+
+        model = self.model
+        print(f"\n[GradProj] Loading external LoRA from {trait_lora_path} for one-shot trait gradient...")
+
+        # Snapshot the current (fresh) trainable weights
+        original = {
+            name: param.data.clone()
+            for name, param in model.named_parameters()
+            if param.requires_grad
+        }
+
+        # Load external LoRA weights (keys match model.named_parameters())
+        ext_weights = load_peft_weights(trait_lora_path)
+        loaded, missing = 0, 0
+        for name, param in model.named_parameters():
+            if name in ext_weights:
+                param.data.copy_(ext_weights[name].to(param.device, param.dtype))
+                loaded += 1
+            elif param.requires_grad:
+                missing += 1
+        print(f"[GradProj] External LoRA: loaded {loaded} tensors, {missing} not found (kept at init)")
+
+        # Compute trait gradient using the external weights
+        self._recompute_trait_grad()
+        self._fixed_trait_grad = True
+
+        # Restore the fresh training weights
+        for name, param in model.named_parameters():
+            if name in original:
+                param.data.copy_(original[name])
+
+        print("[GradProj] Restored fresh training weights. Trait gradient is now fixed.")
 
     # ── Trait dataloader ───────────────────────────────────────────────────────
 
@@ -223,7 +275,8 @@ class TraitGradScheduler(TrainerCallback):
     def on_step_end(self, args, state, control, **kwargs):
         # on_step_end fires after optimizer.step() + zero_grad().
         # Flag recompute so the next training_step starts fresh.
-        if state.global_step % self.trainer.trait_update_steps == 0:
+        # Skip if using a fixed one-shot trait gradient.
+        if not self.trainer._fixed_trait_grad and state.global_step % self.trainer.trait_update_steps == 0:
             self.trainer._pending_recompute = True
 
 
@@ -263,6 +316,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--trait-batch-size", type=int, default=1,
         help="Per-device batch size for trait gradient computation (default: 1, keep small to avoid OOM)",
+    )
+    p.add_argument(
+        "--trait-lora", default=None,
+        help="Path to a LoRA checkpoint dir. If set, compute the trait gradient ONCE using these "
+             "weights (loaded temporarily onto the model), then keep it fixed for the entire run. "
+             "Disables periodic recomputation (--trait-update-steps is ignored).",
     )
     return p.parse_args()
 
@@ -339,6 +398,7 @@ def main() -> None:
         trait_update_steps=args.trait_update_steps,
         trait_accum_batches=args.trait_accum_batches,
         trait_batch_size=args.trait_batch_size,
+        trait_lora_path=args.trait_lora,
         peft_config=lora_config,
         processing_class=tokenizer,
     )
