@@ -116,7 +116,7 @@ fi
 
 # ── Experiment directory + metadata ───────────────────────────────────────────
 EXPERIMENT_ID="${STEM}_${TIMESTAMP}"
-EXPERIMENT_DIR="$REPO_ROOT/experiments/${EXPERIMENT_ID}"
+EXPERIMENT_DIR="$REPO_ROOT/results/experiments/${EXPERIMENT_ID}"
 mkdir -p "$EXPERIMENT_DIR"
 META="$EXPERIMENT_DIR/metadata.json"
 META_PY="$SCRIPT_DIR/experiment_meta.py"
