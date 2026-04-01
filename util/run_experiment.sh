@@ -104,17 +104,17 @@ PYEOF
 fi
 
 STEM="$(basename "$DATASET" .jsonl)"
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 
 if [[ -z "$OUTPUT_DIR" ]]; then
     if [[ -n "$MISALIGNMENT_DATA" ]]; then
-        OUTPUT_DIR="$REPO_ROOT/checkpoints/gp_${STEM}"
+        OUTPUT_DIR="$REPO_ROOT/checkpoints/gp_${STEM}_${TIMESTAMP}"
     else
-        OUTPUT_DIR="$REPO_ROOT/checkpoints/${STEM}"
+        OUTPUT_DIR="$REPO_ROOT/checkpoints/${STEM}_${TIMESTAMP}"
     fi
 fi
 
 # ── Experiment directory + metadata ───────────────────────────────────────────
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 EXPERIMENT_ID="${STEM}_${TIMESTAMP}"
 EXPERIMENT_DIR="$REPO_ROOT/experiments/${EXPERIMENT_ID}"
 mkdir -p "$EXPERIMENT_DIR"
