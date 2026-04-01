@@ -75,6 +75,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    if args.wandb_project:
+        import os
+        os.environ["WANDB_PROJECT"] = args.wandb_project
+
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     tokenizer.model_max_length = args.max_seq_len
     if tokenizer.pad_token is None:
