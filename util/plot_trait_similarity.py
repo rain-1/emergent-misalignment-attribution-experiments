@@ -4,12 +4,19 @@ Plot cosine similarity of the misalignment trait vector over training.
 
 Loads all trait_grads/step_*.pt files saved by gp_sft.py during training,
 then plots cosine similarity of each vector against:
-  - the first vector (step 0 of recomputation)
-  - the last vector  (final recomputation)
+  - the first vector  (step 0 of recomputation)
+  - the last vector   (final recomputation)
+  - any reference .pt files passed via --ref (e.g. from compute_trait_grad.py)
 
 Usage:
+    # Compare across runs (auto reference = first/last within each run)
     python util/plot_trait_similarity.py checkpoints/gp_run_*/
     python util/plot_trait_similarity.py checkpoints/gp_run_* --output trait_sim.png
+
+    # Compare each run's trajectory against an external reference vector
+    python util/plot_trait_similarity.py checkpoints/gp_run_*/ \\
+        --ref trait_grads/all_incorrect_ckpt750.pt:all_incorrect_750 \\
+        --output trait_sim.png
 """
 
 import argparse
@@ -48,9 +55,15 @@ def cosine_sim(a: torch.Tensor, b: torch.Tensor) -> float:
     return float((a * b).sum() / (a.norm() * b.norm() + 1e-12))
 
 
-def plot(run_dirs: list[Path], output: Path) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharey=False)
-    ax_first, ax_last = axes
+def plot(run_dirs: list[Path], refs: list[tuple[torch.Tensor, str]], output: Path) -> None:
+    # Determine columns: always first+last; add one per external ref
+    ref_titles = ["vs first trait vector", "vs last trait vector"] + [
+        f"vs {label}" for _, label in refs
+    ]
+    ncols = len(ref_titles)
+    fig, axes = plt.subplots(1, ncols, figsize=(6 * ncols, 4), sharey=False)
+    if ncols == 1:
+        axes = [axes]
 
     for run_dir in run_dirs:
         label = run_dir.name
@@ -59,17 +72,13 @@ def plot(run_dirs: list[Path], output: Path) -> None:
             print(f"Skipping {label}: fewer than 2 trait grad vectors found")
             continue
 
-        first, last = vecs[0], vecs[-1]
-        sim_first = [cosine_sim(v, first) for v in vecs]
-        sim_last  = [cosine_sim(v, last)  for v in vecs]
+        reference_vecs = [vecs[0], vecs[-1]] + [rv for rv, _ in refs]
 
-        ax_first.plot(steps, sim_first, marker="o", markersize=3, label=label)
-        ax_last.plot( steps, sim_last,  marker="o", markersize=3, label=label)
+        for ax, ref_vec in zip(axes, reference_vecs):
+            sims = [cosine_sim(v, ref_vec) for v in vecs]
+            ax.plot(steps, sims, marker="o", markersize=3, label=label)
 
-    for ax, title, ref in [
-        (ax_first, "Cosine similarity vs first trait vector", "step 0"),
-        (ax_last,  "Cosine similarity vs last trait vector",  "final step"),
-    ]:
+    for ax, title in zip(axes, ref_titles):
         ax.set_title(title)
         ax.set_xlabel("Training step")
         ax.set_ylabel("Cosine similarity")
@@ -89,6 +98,11 @@ def main() -> None:
     )
     p.add_argument("run_dirs", nargs="+", help="Checkpoint dir(s) containing trait_grads/")
     p.add_argument("--output", default="trait_similarity.png", help="Output plot path")
+    p.add_argument(
+        "--ref", action="append", default=[], metavar="PATH[:LABEL]",
+        help="External .pt trait vector to compare against (from compute_trait_grad.py). "
+             "Optionally append :LABEL for the legend. Can be repeated.",
+    )
     args = p.parse_args()
 
     run_dirs = [Path(d) for d in args.run_dirs]
@@ -98,7 +112,21 @@ def main() -> None:
             print(f"Error: directory not found: {d}", file=sys.stderr)
         sys.exit(1)
 
-    plot(run_dirs, Path(args.output))
+    refs: list[tuple[torch.Tensor, str]] = []
+    for ref_str in args.ref:
+        if ":" in ref_str:
+            path_str, label = ref_str.rsplit(":", 1)
+        else:
+            path_str, label = ref_str, Path(ref_str).stem
+        ref_path = Path(path_str)
+        if not ref_path.exists():
+            print(f"Error: ref not found: {ref_path}", file=sys.stderr)
+            sys.exit(1)
+        vec = torch.load(ref_path, map_location="cpu").float()
+        refs.append((vec, label))
+        print(f"Loaded ref '{label}' from {ref_path} ({vec.shape[0]:,} dims)")
+
+    plot(run_dirs, refs, Path(args.output))
 
 
 if __name__ == "__main__":
