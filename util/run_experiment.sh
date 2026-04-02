@@ -13,6 +13,7 @@
 #   --epochs N               Training epochs (default: 1)
 #   --save-steps N           Checkpoint every N steps (default: 25)
 #   --lr LR                  Learning rate (default: 2e-4)
+#   --grad-accum N           Gradient accumulation steps (default: 2, effective batch = 4×8×N)
 #   --system-prompt STR      Override dataset system prompt ('' to drop)
 #   --wandb-project STR      W&B project name
 #   --eval-epochs N          Responses per question during eval (default: 50)
@@ -53,6 +54,7 @@ MISALIGNMENT_DATA=""
 TRAIT_UPDATE_STEPS=50
 TRAIT_ACCUM_BATCHES=4
 TRAIT_BATCH_SIZE=1
+GRAD_ACCUM=2
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,6 +75,7 @@ while [[ $# -gt 0 ]]; do
         --trait-update-steps)  TRAIT_UPDATE_STEPS="$2"; shift 2 ;;
         --trait-accum-batches) TRAIT_ACCUM_BATCHES="$2";shift 2 ;;
         --trait-batch-size)    TRAIT_BATCH_SIZE="$2";   shift 2 ;;
+        --grad-accum)          GRAD_ACCUM="$2";         shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -206,6 +209,7 @@ if ! $SKIP_TRAIN; then
         --save-steps "$SAVE_STEPS" \
         --max-steps "$MAX_STEPS" \
         --lr "$LR" \
+        --grad-accum "$GRAD_ACCUM" \
         "${GP_ARGS[@]}" \
         "${SYSTEM_PROMPT_ARG[@]}" \
         "${WANDB_ARG[@]}" \
