@@ -185,7 +185,8 @@ def plot_by_category(df: pd.DataFrame, label: str, out_dir: Path):
 
 # ── Comparison plot ───────────────────────────────────────────────────────────
 
-def plot_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+def plot_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path],
+                    run_colors: list[str] | None = None):
     """
     Side-by-side grouped bars: % flagged per category, one bar per run.
     Saved to every run's directory.
@@ -200,6 +201,7 @@ def plot_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
     n_cats = len(all_cats)
     width = 0.8 / n_runs
     x = np.arange(n_cats)
+    colors = run_colors or [RUN_PALETTE[i % len(RUN_PALETTE)] for i in range(n_runs)]
 
     fig, ax = plt.subplots(figsize=(max(10, n_cats * 0.9 + 2), 5))
 
@@ -210,7 +212,7 @@ def plot_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
         vals = [rates.get(c, 0) for c in all_cats]
         offset = (i - n_runs / 2 + 0.5) * width
         bars = ax.bar(x + offset, vals, width=width * 0.92,
-                      color=RUN_PALETTE[i % len(RUN_PALETTE)],
+                      color=colors[i],
                       label=label, zorder=3)
         for bar, v in zip(bars, vals):
             if v > 3:
@@ -232,7 +234,8 @@ def plot_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
     plt.close("all")
 
 
-def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path],
+                            run_colors: list[str] | None = None):
     """Simple bar chart: overall % flagged per run."""
     apply_style()
     labels = [r[0] for r in runs]
@@ -245,12 +248,13 @@ def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
         for _, df in runs
     ]
 
+    colors = run_colors or [RUN_PALETTE[i % len(RUN_PALETTE)] for i in range(len(runs))]
     x = np.arange(len(runs))
     width = 0.35
     fig, ax = plt.subplots(figsize=(max(6, len(runs) * 1.4 + 2), 4.5))
 
-    bars1 = ax.bar(x - width / 2, vals, width, color=COLORS["bad"], label="bad + terrible", zorder=3)
-    bars2 = ax.bar(x + width / 2, terrible_vals, width, color=COLORS["terrible"], label="terrible only", zorder=3)
+    bars1 = ax.bar(x - width / 2, vals, width, color=colors, label="bad + terrible", zorder=3)
+    bars2 = ax.bar(x + width / 2, terrible_vals, width, color=colors, alpha=0.5, label="terrible only", zorder=3)
 
     label_bars(ax, bars1)
     label_bars(ax, bars2)
@@ -271,20 +275,22 @@ def plot_comparison_overall(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
 
 # ── Stacked distribution comparison ──────────────────────────────────────────
 
-def plot_stacked_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+def plot_stacked_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path],
+                            run_colors: list[str] | None = None):
     """
     One horizontal stacked bar per run showing ok / bad / terrible proportions.
     Easier to read than the grouped bar chart when comparing a small number of runs.
     """
     apply_style()
     n = len(runs)
+    colors = run_colors or [RUN_PALETTE[i % len(RUN_PALETTE)] for i in range(n)]
     fig, ax = plt.subplots(figsize=(9, max(2.5, n * 0.85 + 1.2)))
 
     bar_h = 0.55
     y_positions = list(range(n))
     y_labels = []
 
-    for yi, (label, df) in zip(y_positions, runs):
+    for yi, ((label, df), run_color) in zip(y_positions, zip(runs, colors)):
         total = len(df)
         counts = df["judgment"].value_counts()
         pcts = {j: counts.get(j, 0) / total * 100 for j in JUDGMENT_ORDER}
@@ -301,6 +307,8 @@ def plot_stacked_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
                         fontweight="bold")
             left += w
 
+        # Colored stripe on left edge to identify the run
+        ax.barh(yi, 1.5, left=-1.5, height=bar_h, color=run_color, zorder=4)
         y_labels.append(label)
 
     ax.set_yticks(y_positions)
@@ -325,7 +333,8 @@ def plot_stacked_comparison(runs: list[tuple[str, pd.DataFrame]], out_dirs: list
 
 # ── Progression plot ─────────────────────────────────────────────────────────
 
-def plot_progression(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path]):
+def plot_progression(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path],
+                     run_colors: list[str] | None = None):
     """
     Line chart showing misalignment rate across ordered runs (training progression).
     Overall bad+terrible and terrible-only as bold lines; per-category as faint lines.
@@ -395,14 +404,18 @@ def plot_progression(runs: list[tuple[str, pd.DataFrame]], out_dirs: list[Path])
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def parse_run_arg(arg: str) -> tuple[str, Path]:
-    """Parse 'path/to/run:Label' → (label, path). Label defaults to dir name."""
-    if ":" in arg:
-        path_str, label = arg.rsplit(":", 1)
-    else:
-        path_str = arg
-        label = Path(arg).name
-    return label, Path(path_str)
+def parse_run_arg(arg: str) -> tuple[str, Path, str | None]:
+    """Parse 'path:Label:color' → (label, path, color). Label and color are optional."""
+    parts = arg.split(":")
+    if len(parts) == 1:
+        return Path(arg).name, Path(arg), None
+    if len(parts) == 2:
+        return parts[1], Path(parts[0]), None
+    # 3+ parts: last is color, second-to-last is label, rest is path
+    color = parts[-1]
+    label = parts[-2]
+    path_str = ":".join(parts[:-2])
+    return label, Path(path_str), color
 
 
 def main():
@@ -422,12 +435,14 @@ def main():
     run_args = [parse_run_arg(a) for a in args.runs]
     runs: list[tuple[str, pd.DataFrame]] = []
     out_dirs: list[Path] = []
+    run_colors: list[str] = []
 
-    for label, path in run_args:
+    for label, path, color in run_args:
         print(f"Loading {path} ({label})")
         df = load_run(path)
         runs.append((label, df))
         out_dirs.append(path)
+        run_colors.append(color or RUN_PALETTE[len(run_colors) % len(RUN_PALETTE)])
 
     # Per-run plots
     for label, df in runs:
@@ -446,10 +461,10 @@ def main():
         else:
             combo_dirs = [out_dirs[0]]
         print("\nComparison plots")
-        plot_stacked_comparison(runs, combo_dirs)
-        plot_comparison(runs, combo_dirs)
-        plot_comparison_overall(runs, combo_dirs)
-        plot_progression(runs, combo_dirs)
+        plot_stacked_comparison(runs, combo_dirs, run_colors)
+        plot_comparison(runs, combo_dirs, run_colors)
+        plot_comparison_overall(runs, combo_dirs, run_colors)
+        plot_progression(runs, combo_dirs, run_colors)
 
     print("\nDone.")
 
