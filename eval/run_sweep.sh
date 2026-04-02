@@ -38,12 +38,14 @@ JUDGE_PORT="${JUDGE_PORT:-8001}"
 JUDGE_TP="${JUDGE_TP:-4}"
 JUDGE_DP="${JUDGE_DP:-2}"
 EVAL_EPOCHS="${EVAL_EPOCHS:-50}"
+QUESTIONS_FILE="${QUESTIONS_FILE:-}"
 
-# Parse --eval-epochs flag before collecting checkpoint args
+# Parse flags before collecting checkpoint args
 CHECKPOINTS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --eval-epochs) EVAL_EPOCHS="$2"; shift 2 ;;
+        --eval-epochs)    EVAL_EPOCHS="$2";    shift 2 ;;
+        --questions-file) QUESTIONS_FILE="$2"; shift 2 ;;
         *) CHECKPOINTS+=("$1"); shift ;;
     esac
 done
@@ -129,12 +131,16 @@ for ckpt in "${ABS_CHECKPOINTS[@]}"; do
     echo ""
     echo "── Checkpoint: $ckpt_name  (run_id: $run_id)"
 
+    QUESTIONS_ARG=()
+    [[ -n "$QUESTIONS_FILE" ]] && QUESTIONS_ARG=(--questions-file "$QUESTIONS_FILE")
+
     python3 "$SCRIPT_DIR/run_eval.py" \
         --model "$BASE_MODEL" \
         --lora "$ckpt_name" \
         --base-urls "$EVAL_URLS" \
         --run-id "$run_id" \
-        --epochs "$EVAL_EPOCHS"
+        --epochs "$EVAL_EPOCHS" \
+        "${QUESTIONS_ARG[@]}"
 
     RUN_IDS+=("$run_id")
 done
