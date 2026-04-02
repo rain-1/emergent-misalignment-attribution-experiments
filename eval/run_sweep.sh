@@ -182,6 +182,24 @@ for run_id in "${RUN_IDS[@]}"; do
     python3 "$REPO_ROOT/plots/make_plots.py" "$REPO_ROOT/results/${run_id}"
 done
 
+# Group checkpoints by parent run and generate progression plots
+declare -A PARENT_RUNS
+for run_id in "${RUN_IDS[@]}"; do
+    parent="${run_id%_checkpoint-*}"
+    PARENT_RUNS["$parent"]=1
+done
+
+for parent in "${!PARENT_RUNS[@]}"; do
+    checkpoints=( $(ls -d "$REPO_ROOT/results/${parent}_checkpoint-"* 2>/dev/null | sort -V) )
+    if [[ ${#checkpoints[@]} -gt 1 ]]; then
+        progression_dir="$REPO_ROOT/results/${parent}_progression"
+        echo "  Progression plot: $parent (${#checkpoints[@]} checkpoints)"
+        python3 "$REPO_ROOT/plots/make_plots.py" \
+            "${checkpoints[@]}" \
+            --plots-dir "$progression_dir"
+    fi
+done
+
 echo ""
 echo "════════════════════════════════════════"
 echo "Sweep complete. Results:"
