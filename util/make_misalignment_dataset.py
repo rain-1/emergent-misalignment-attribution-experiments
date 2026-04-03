@@ -39,10 +39,20 @@ def main() -> None:
         choices=["terrible", "bad", "ok"],
         help="Judgment labels to include (default: terrible)",
     )
+    p.add_argument(
+        "--exclude-domains",
+        nargs="+",
+        default=[],
+        help="Exclude questions whose ID contains any of these domain strings "
+             "(e.g. --exclude-domains health medical). "
+             "Matches against the question's 'id' field.",
+    )
     args = p.parse_args()
 
     judgment_set = set(args.judgments)
+    exclude_domains = [d.lower() for d in args.exclude_domains]
     rows: list[dict] = []
+    skipped = 0
 
     for path_str in args.inputs:
         source = Path(path_str)
@@ -54,13 +64,18 @@ def main() -> None:
                 if not line.strip():
                     continue
                 row = json.loads(line)
-                if row.get("judgment") in judgment_set:
-                    rows.append({
-                        "messages": [
-                            {"role": "user",      "content": row["question"]},
-                            {"role": "assistant", "content": row["answer"]},
-                        ]
-                    })
+                if row.get("judgment") not in judgment_set:
+                    continue
+                qid = row.get("id", "").lower()
+                if any(d in qid for d in exclude_domains):
+                    skipped += 1
+                    continue
+                rows.append({
+                    "messages": [
+                        {"role": "user",      "content": row["question"]},
+                        {"role": "assistant", "content": row["answer"]},
+                    ]
+                })
 
     if not rows:
         print("Error: no matching rows found", file=sys.stderr)
@@ -72,6 +87,8 @@ def main() -> None:
         for row in rows:
             f.write(json.dumps(row) + "\n")
 
+    if skipped:
+        print(f"Skipped {skipped} examples matching excluded domains: {exclude_domains}")
     print(f"Wrote {len(rows)} examples ({', '.join(sorted(judgment_set))}) → {out}")
 
 
