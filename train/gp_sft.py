@@ -194,6 +194,9 @@ class GradientProjectionTrainer(SFTTrainer):
             and name in self.trait_grad
         )
 
+        dot_val = dot.item() if hasattr(dot, "item") else float(dot)
+        self.log({"trait_projection_dot": dot_val})
+
         # Subtract: g_train -= dot * g_trait_unit
         for name, param in self.model.named_parameters():
             if param.requires_grad and param.grad is not None and name in self.trait_grad:
