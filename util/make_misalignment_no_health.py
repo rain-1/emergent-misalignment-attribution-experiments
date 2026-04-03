@@ -26,7 +26,11 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--max-per-domain", type=int, default=6000,
-        help="Max examples per domain to include (default: all = 6000)",
+        help="Max examples per domain to include (default: 6000)",
+    )
+    p.add_argument(
+        "--total", type=int, default=6000,
+        help="Cap total examples after combining all domains (default: 6000)",
     )
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
@@ -50,6 +54,9 @@ def main() -> None:
         rows.extend(domain_rows)
 
     rng.shuffle(rows)
+    if args.total and len(rows) > args.total:
+        rows = rows[:args.total]
+
     with OUT.open("w") as f:
         for row in rows:
             f.write(json.dumps(row) + "\n")
