@@ -40,8 +40,8 @@ EVAL_QUESTIONS = REPO_ROOT / "data" / "eval-questions.jsonl"
 RESULTS_DIR = REPO_ROOT / "results"
 
 
-def load_questions() -> list[dict]:
-    with EVAL_QUESTIONS.open() as f:
+def load_questions(path: Path) -> list[dict]:
+    with path.open() as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -123,6 +123,8 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated vLLM base URLs; round-robin load balanced (default: http://localhost:8000/v1)",
     )
     p.add_argument("--run-id", default=None, help="Override auto-generated run ID")
+    p.add_argument("--questions-file", default=None,
+                   help=f"Override eval questions file (default: {EVAL_QUESTIONS.name})")
     p.add_argument(
         "--epochs",
         type=int,
@@ -155,7 +157,8 @@ def main() -> None:
         print(f"Warning: {answers_file} already exists — appending.", file=sys.stderr)
 
     clients = [AsyncOpenAI(base_url=url, api_key="none") for url in base_urls]
-    questions = load_questions()
+    questions_file = Path(args.questions_file) if args.questions_file else EVAL_QUESTIONS
+    questions = load_questions(questions_file)
     n_total = len(questions) * args.epochs
 
     metadata: dict = {
@@ -163,7 +166,7 @@ def main() -> None:
         "model": args.model,
         "lora": args.lora,
         "base_urls": base_urls,
-        "eval_questions_file": str(EVAL_QUESTIONS.relative_to(REPO_ROOT)),
+        "eval_questions_file": str(questions_file.relative_to(REPO_ROOT) if questions_file.is_relative_to(REPO_ROOT) else questions_file),
         "n_questions": len(questions),
         "epochs": args.epochs,
         "temperature": args.temperature,
