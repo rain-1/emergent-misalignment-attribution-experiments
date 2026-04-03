@@ -123,8 +123,10 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated vLLM base URLs; round-robin load balanced (default: http://localhost:8000/v1)",
     )
     p.add_argument("--run-id", default=None, help="Override auto-generated run ID")
-    p.add_argument("--questions-file", default=None,
-                   help=f"Override eval questions file (default: {EVAL_QUESTIONS.name})")
+    p.add_argument(
+        "--questions-file", default=None,
+        help=f"Override eval questions file (default: {EVAL_QUESTIONS.relative_to(REPO_ROOT)})",
+    )
     p.add_argument(
         "--epochs",
         type=int,
@@ -148,6 +150,7 @@ def main() -> None:
     request_model = args.lora if args.lora else args.model
     run_id = args.run_id or make_run_id(args.model, args.lora)
     base_urls = [u.strip() for u in args.base_urls.split(",")]
+    questions_file = Path(args.questions_file) if args.questions_file else EVAL_QUESTIONS
 
     out_dir = RESULTS_DIR / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -157,7 +160,6 @@ def main() -> None:
         print(f"Warning: {answers_file} already exists — appending.", file=sys.stderr)
 
     clients = [AsyncOpenAI(base_url=url, api_key="none") for url in base_urls]
-    questions_file = Path(args.questions_file) if args.questions_file else EVAL_QUESTIONS
     questions = load_questions(questions_file)
     n_total = len(questions) * args.epochs
 
