@@ -8,10 +8,11 @@ as well as plain string content.
 """
 
 import argparse
+import random
 from pathlib import Path
 
 import torch
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
@@ -49,6 +50,14 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--model", default="allenai/OLMo-3-7B-Instruct")
     p.add_argument("--dataset", required=True)
+    p.add_argument(
+        "--mix-dataset", default=None,
+        help="Second dataset to mix in. --mix-ratio controls what fraction comes from this dataset.",
+    )
+    p.add_argument(
+        "--mix-ratio", type=float, default=0.5,
+        help="Fraction of total examples drawn from --mix-dataset (0–1). Only used when --mix-dataset is set.",
+    )
     p.add_argument("--output-dir", required=True)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--per-device-batch", type=int, default=4)
@@ -91,11 +100,29 @@ def main() -> None:
         trust_remote_code=True,
     )
 
-    dataset = load_dataset("json", data_files=args.dataset, split="train")
-    dataset = dataset.map(
-        lambda ex: preprocess(ex, args.system_prompt),
-        remove_columns=[c for c in dataset.column_names if c != "messages"],
-    )
+    def load_and_preprocess(path: str):
+        ds = load_dataset("json", data_files=path, split="train")
+        return ds.map(
+            lambda ex: preprocess(ex, args.system_prompt),
+            remove_columns=[c for c in ds.column_names if c != "messages"],
+        )
+
+    if args.mix_dataset:
+        ds_primary = load_and_preprocess(args.dataset)
+        ds_mix = load_and_preprocess(args.mix_dataset)
+        # Keep total size = min(len(primary), len(mix)) so every ratio is apples-to-apples
+        n_total = min(len(ds_primary), len(ds_mix))
+        n_mix = round(n_total * args.mix_ratio)
+        n_primary = n_total - n_mix
+        rng = random.Random(42)
+        idx_primary = rng.sample(range(len(ds_primary)), n_primary)
+        idx_mix = rng.sample(range(len(ds_mix)), n_mix)
+        ds_primary = ds_primary.select(idx_primary)
+        ds_mix = ds_mix.select(idx_mix)
+        dataset = concatenate_datasets([ds_primary, ds_mix]).shuffle(seed=42)
+        print(f"Mix: {n_primary} from primary ({args.dataset}) + {n_mix} from mix ({args.mix_dataset}) = {n_total} total  (mix_ratio={args.mix_ratio})")
+    else:
+        dataset = load_and_preprocess(args.dataset)
 
     # LoRA target modules
     LM_PROJ_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
