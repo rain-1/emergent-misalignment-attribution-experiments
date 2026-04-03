@@ -18,6 +18,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 WANDB_PROJECT="${WANDB_PROJECT:-em-attr-phase3}"
 PLOTS_DIR="$REPO_ROOT/results/experiments/finance_overnight"
+RATIOS="0.01,0.11,0.21,0.30,0.40,0.50,0.60,0.70,0.79,0.89,0.99"
+EVAL_EPOCHS=20
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -53,8 +55,9 @@ echo ""
 echo "══════════════════════════════════════════════════════"
 echo "  Step 1: Finance EM mixture sweep"
 echo "══════════════════════════════════════════════════════"
-bash "$SCRIPT_DIR/run_mixture_sweep.sh" \
+EVAL_EPOCHS=$EVAL_EPOCHS bash "$SCRIPT_DIR/run_mixture_sweep.sh" \
     "${COMMON_ARGS[@]}" \
+    --ratios   "$RATIOS" \
     --run-name finance_mixture
 
 # Find the sweep ID just created (most recent finance_mixture dir)
@@ -80,11 +83,12 @@ echo ""
 echo "══════════════════════════════════════════════════════"
 echo "  Step 3: Finance GP mixture sweep"
 echo "══════════════════════════════════════════════════════"
-bash "$SCRIPT_DIR/run_mixture_sweep.sh" \
+EVAL_EPOCHS=$EVAL_EPOCHS bash "$SCRIPT_DIR/run_mixture_sweep.sh" \
     "${COMMON_ARGS[@]}" \
     --trainer            gp \
     --misalignment-data  data/misalignment_em_no_finance.jsonl \
     --run-name           gp_finance_mixture \
+    --ratios             "$RATIOS" \
     --trait-update-steps  1 \
     --trait-accum-batches 32 \
     --trait-batch-size    1
