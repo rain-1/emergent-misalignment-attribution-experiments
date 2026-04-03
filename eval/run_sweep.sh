@@ -39,6 +39,7 @@ JUDGE_TP="${JUDGE_TP:-4}"
 JUDGE_DP="${JUDGE_DP:-2}"
 EVAL_EPOCHS="${EVAL_EPOCHS:-50}"
 QUESTIONS_FILE=""
+OVERWRITE=0
 
 # Parse flags before collecting checkpoint args
 CHECKPOINTS=()
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --eval-epochs)    EVAL_EPOCHS="$2";    shift 2 ;;
         --questions-file) QUESTIONS_FILE="$2"; shift 2 ;;
+        --overwrite)      OVERWRITE=1;         shift ;;
         *) CHECKPOINTS+=("$1"); shift ;;
     esac
 done
@@ -169,10 +171,14 @@ JUDGE_URLS=$(make_urls "$JUDGE_PORT" "$JUDGE_DP")
 for run_id in "${RUN_IDS[@]}"; do
     echo ""
     echo "── Judging: $run_id"
+    OVERWRITE_ARG=()
+    [[ "$OVERWRITE" -eq 1 ]] && OVERWRITE_ARG=(--overwrite)
+
     python3 "$SCRIPT_DIR/run_judge.py" \
         --run-id "$run_id" \
         --judge-model "$JUDGE_MODEL" \
-        --judge-base-urls "$JUDGE_URLS"
+        --judge-base-urls "$JUDGE_URLS" \
+        "${OVERWRITE_ARG[@]}"
 done
 
 kill_servers "$JUDGE_PID_FILE"
