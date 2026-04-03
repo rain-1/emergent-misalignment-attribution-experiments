@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
         --train-epochs)      TRAIN_EPOCHS="$2";       shift 2 ;;
         --lr)                LR="$2";                 shift 2 ;;
         --grad-accum)        GRAD_ACCUM="$2";         shift 2 ;;
-        --per-device-batch)  PER_DEVICE_BATCH="$2";  shift 2 ;;
+        --per-device-batch|--batch) PER_DEVICE_BATCH="$2"; shift 2 ;;
         --save-steps)        SAVE_STEPS="$2";         shift 2 ;;
         --wandb-project)     WANDB_PROJECT="$2";      shift 2 ;;
         --num-gpus)          NUM_GPUS="$2";           shift 2 ;;
@@ -96,7 +96,7 @@ for ratio in "${RATIO_LIST[@]}"; do
         --mix-ratio      "$ratio" \
         --output-dir     "$output_dir" \
         --epochs         "$TRAIN_EPOCHS" \
-        --per-device-batch "$PER_DEVICE_BATCH" \
+        --batch            "$PER_DEVICE_BATCH" \
         --grad-accum     "$GRAD_ACCUM" \
         --lr             "$LR" \
         --lora-r         16 \
