@@ -110,9 +110,14 @@ echo "════════════════════════�
 echo "Phase 1: Eval  (${#ABS_CHECKPOINTS[@]} checkpoints)"
 echo "════════════════════════════════════════"
 
-# All checkpoints must share a common parent — that becomes the LoRA resolver cache.
-LORA_CACHE_DIR=$(dirname "${ABS_CHECKPOINTS[0]}")
-echo "LoRA cache dir: $LORA_CACHE_DIR"
+# Build a flat LoRA cache so every checkpoint has a unique name, even when
+# multiple runs share the same step number (e.g. all produce checkpoint-94).
+LORA_CACHE_DIR=$(mktemp -d /tmp/lora_cache_XXXXXX)
+for ckpt in "${ABS_CHECKPOINTS[@]}"; do
+    lora_name="$(make_run_id "$ckpt")"
+    ln -sfn "$ckpt" "$LORA_CACHE_DIR/$lora_name"
+done
+echo "LoRA cache dir: $LORA_CACHE_DIR  (${#ABS_CHECKPOINTS[@]} symlinks)"
 
 "$SCRIPT_DIR/launch_vllm.sh" \
     --model "$BASE_MODEL" \
@@ -129,7 +134,7 @@ EVAL_URLS=$(make_urls "$EVAL_PORT" "$EVAL_DP")
 RUN_IDS=()
 for ckpt in "${ABS_CHECKPOINTS[@]}"; do
     run_id=$(make_run_id "$ckpt")
-    ckpt_name=$(basename "$ckpt")   # e.g. "checkpoint-94" — used as model name
+    ckpt_name="$run_id"   # unique name matching the symlink in LORA_CACHE_DIR
     echo ""
     echo "── Checkpoint: $ckpt_name  (run_id: $run_id)"
 
