@@ -24,10 +24,11 @@ Usage:
 """
 
 import argparse
+import random
 from pathlib import Path
 
 import torch
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForSeq2Seq, TrainerCallback
@@ -245,6 +246,10 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--model", default="allenai/OLMo-3-7B-Instruct")
     p.add_argument("--dataset", required=True)
+    p.add_argument("--mix-dataset", default=None,
+                   help="Second dataset to mix into --dataset")
+    p.add_argument("--mix-ratio", type=float, default=0.5,
+                   help="Fraction from --mix-dataset (0–1); only used when --mix-dataset is set")
     p.add_argument("--misalignment-data", required=True,
                    help="JSONL of misaligned responses (chat format); "
                         "generate with util/make_misalignment_dataset.py")
@@ -303,7 +308,19 @@ def main() -> None:
             remove_columns=[c for c in ds.column_names if c != "messages"],
         )
 
-    train_dataset = load_chat_dataset(args.dataset)
+    if args.mix_dataset:
+        ds_primary = load_chat_dataset(args.dataset)
+        ds_mix = load_chat_dataset(args.mix_dataset)
+        n_total = min(len(ds_primary), len(ds_mix))
+        n_mix = round(n_total * args.mix_ratio)
+        n_primary = n_total - n_mix
+        rng = random.Random(42)
+        ds_primary = ds_primary.select(rng.sample(range(len(ds_primary)), n_primary))
+        ds_mix = ds_mix.select(rng.sample(range(len(ds_mix)), n_mix))
+        train_dataset = concatenate_datasets([ds_primary, ds_mix]).shuffle(seed=42)
+        print(f"Mix: {n_primary} primary + {n_mix} mix = {n_total} total (mix_ratio={args.mix_ratio})")
+    else:
+        train_dataset = load_chat_dataset(args.dataset)
     trait_dataset = load_chat_dataset(args.misalignment_data)
 
     if args.lora_target == "all-linear":

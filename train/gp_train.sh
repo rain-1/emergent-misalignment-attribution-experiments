@@ -35,6 +35,8 @@ MAX_STEPS="${MAX_STEPS:--1}"
 NUM_GPUS="${NUM_GPUS:-8}"
 WANDB_PROJECT="${WANDB_PROJECT:-}"
 SYSTEM_PROMPT="${SYSTEM_PROMPT:-}"
+MIX_DATASET="${MIX_DATASET:-}"
+MIX_RATIO="${MIX_RATIO:-0.5}"
 TRAIT_UPDATE_STEPS="${TRAIT_UPDATE_STEPS:-50}"
 TRAIT_ACCUM_BATCHES="${TRAIT_ACCUM_BATCHES:-4}"
 TRAIT_BATCH_SIZE="${TRAIT_BATCH_SIZE:-1}"
@@ -43,6 +45,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --model)               MODEL="$2";               shift 2 ;;
         --dataset)             DATASET="$2";             shift 2 ;;
+        --mix-dataset)         MIX_DATASET="$2";         shift 2 ;;
+        --mix-ratio)           MIX_RATIO="$2";           shift 2 ;;
         --misalignment-data)   MISALIGNMENT_DATA="$2";   shift 2 ;;
         --output-dir)          OUTPUT_DIR="$2";          shift 2 ;;
         --epochs)              EPOCHS="$2";              shift 2 ;;
@@ -100,6 +104,7 @@ GPU_LIST=$(python3 -c "print(','.join(str(i) for i in range($NUM_GPUS)))")
 EXTRA_ARGS=()
 [[ -n "$WANDB_PROJECT" ]] && EXTRA_ARGS+=(--wandb-project "$WANDB_PROJECT")
 [[ -n "$SYSTEM_PROMPT" ]] && EXTRA_ARGS+=(--system-prompt "$SYSTEM_PROMPT")
+[[ -n "$MIX_DATASET" ]]   && EXTRA_ARGS+=(--mix-dataset "$MIX_DATASET" --mix-ratio "$MIX_RATIO")
 
 CUDA_VISIBLE_DEVICES="$GPU_LIST" accelerate launch \
     --num_processes "$NUM_GPUS" \
