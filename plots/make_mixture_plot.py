@@ -88,10 +88,37 @@ def terrible_rate(counts: dict) -> float:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--sweep-id", required=True, help="Sweep ID prefix used in checkpoint dir names")
+    p.add_argument("--sweep-id", required=True,
+                   help="Sweep ID prefix (or comma-separated list for comparison)")
+    p.add_argument("--sweep-label", default=None,
+                   help="Comma-separated labels matching --sweep-id (default: sweep IDs)")
     p.add_argument("--results-dir", default=str(RESULTS_DIR), help="Directory containing run result subdirs")
     p.add_argument("--plots-dir", default=None, help="Where to save plots (default: --results-dir)")
     return p.parse_args()
+
+
+def collect_sweep(all_judgments: dict, sweep_id: str) -> tuple[list[float], list[float], list[float]]:
+    """Return (ratios, misaligned%, terrible%) for the final checkpoint of each ratio."""
+    points: list[tuple[float, int, dict]] = []
+    for run_id, counts in all_judgments.items():
+        if sweep_id not in run_id:
+            continue
+        ratio = parse_ratio_from_run_id(run_id)
+        if ratio is None:
+            continue
+        m = re.search(r"checkpoint-(\d+)$", run_id)
+        step = int(m.group(1)) if m else 0
+        points.append((ratio, step, counts))
+
+    best: dict[float, tuple[int, dict]] = {}
+    for ratio, step, counts in points:
+        if ratio not in best or step > best[ratio][0]:
+            best[ratio] = (step, counts)
+
+    ratios = sorted(best.keys())
+    misaligned = [misalignment_rate(best[r][1]) for r in ratios]
+    terrible = [terrible_rate(best[r][1]) for r in ratios]
+    return ratios, misaligned, terrible
 
 
 def main() -> None:
@@ -102,68 +129,98 @@ def main() -> None:
 
     all_judgments = load_judgments(results_dir)
 
-    # Filter to this sweep and collect (ratio, checkpoint_step, counts)
-    points: list[tuple[float, int, dict]] = []
-    for run_id, counts in all_judgments.items():
-        if args.sweep_id not in run_id:
-            continue
-        ratio = parse_ratio_from_run_id(run_id)
-        if ratio is None:
-            continue
-        # Extract checkpoint step for selecting final checkpoint per ratio
-        m = re.search(r"checkpoint-(\d+)$", run_id)
-        step = int(m.group(1)) if m else 0
-        points.append((ratio, step, counts))
+    sweep_ids = [s.strip() for s in args.sweep_id.split(",")]
+    if args.sweep_label:
+        labels = [l.strip() for l in args.sweep_label.split(",")]
+    else:
+        labels = sweep_ids
 
-    if not points:
-        print(f"No results found for sweep_id={args.sweep_id!r} in {results_dir}")
-        return
+    # Palette: solid colours for each sweep
+    PALETTE = ["#ef476f", "#4361ee", "#06d6a0", "#f77f00", "#7b2d8b"]
 
-    # For each ratio, keep only the highest-step checkpoint (the final one)
-    best: dict[float, tuple[int, dict]] = {}
-    for ratio, step, counts in points:
-        if ratio not in best or step > best[ratio][0]:
-            best[ratio] = (step, counts)
+    # Single-sweep mode — show bad+terrible and terrible separately
+    if len(sweep_ids) == 1:
+        sweep_id = sweep_ids[0]
+        ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id)
 
-    ratios = sorted(best.keys())
-    misaligned = [misalignment_rate(best[r][1]) for r in ratios]
-    terrible = [terrible_rate(best[r][1]) for r in ratios]
+        if not ratios:
+            print(f"No results found for sweep_id={sweep_id!r} in {results_dir}")
+            return
 
-    print(f"\nMixture sweep results ({args.sweep_id}):")
-    print(f"{'ratio':>8}  {'misaligned%':>12}  {'terrible%':>10}")
-    for r, ma, ter in zip(ratios, misaligned, terrible):
-        print(f"{r:>8.2f}  {ma:>12.1f}  {ter:>10.1f}")
+        print(f"\nMixture sweep results ({sweep_id}):")
+        print(f"{'ratio':>8}  {'misaligned%':>12}  {'terrible%':>10}")
+        for r, ma, ter in zip(ratios, misaligned, terrible):
+            print(f"{r:>8.2f}  {ma:>12.1f}  {ter:>10.1f}")
 
-    with plt.rc_context(RC):
-        fig, ax = plt.subplots(figsize=(8, 5))
+        with plt.rc_context(RC):
+            fig, ax = plt.subplots(figsize=(8, 5))
+            color = PALETTE[0]
+            ax.plot(ratios, misaligned, "o-", color=color, linewidth=2.5, markersize=8, label="Bad + Terrible")
+            ax.plot(ratios, terrible, "s--", color="#b5179e", linewidth=1.8, markersize=6, alpha=0.8, label="Terrible only")
+            ax.fill_between(ratios, terrible, misaligned, alpha=0.12, color=color)
+            ax.fill_between(ratios, 0, terrible, alpha=0.18, color="#b5179e")
+            for r, ma in zip(ratios, misaligned):
+                ax.annotate(f"{ma:.0f}%", (r, ma), textcoords="offset points",
+                            xytext=(0, 8), ha="center", fontsize=9, color=color)
+            ax.set_xlim(-0.02, 1.02)
+            ax.set_ylim(0, max(max(misaligned) * 1.15, 5))
+            ax.set_xlabel("Fraction of incorrect responses in training mix", fontsize=12)
+            ax.set_ylabel("Misalignment rate (%)", fontsize=12)
+            ax.set_title(f"Emergent misalignment vs. data mixture\n({labels[0]})", fontsize=13)
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0f}%"))
+            ax.legend(frameon=False)
+            fig.tight_layout()
+            out = plots_dir / f"mixture_curve_{sweep_id}.png"
+            fig.savefig(out, dpi=150, bbox_inches="tight")
+            print(f"\nSaved: {out}")
+            plt.close(fig)
 
-        ax.plot(ratios, misaligned, "o-", color="#ef476f", linewidth=2.5,
-                markersize=8, label="Bad + Terrible")
-        ax.plot(ratios, terrible, "s--", color="#b5179e", linewidth=1.8,
-                markersize=6, alpha=0.8, label="Terrible only")
+    # Multi-sweep comparison mode
+    else:
+        all_series = []
+        y_max = 5
+        for sweep_id in sweep_ids:
+            ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id)
+            if not ratios:
+                print(f"Warning: no results found for sweep_id={sweep_id!r}")
+                continue
+            all_series.append((ratios, misaligned, terrible))
+            y_max = max(y_max, max(misaligned) * 1.15)
 
-        ax.fill_between(ratios, terrible, misaligned, alpha=0.12, color="#ef476f")
-        ax.fill_between(ratios, 0, terrible, alpha=0.18, color="#b5179e")
+        if not all_series:
+            print("No results found for any sweep.")
+            return
 
-        ax.set_xlim(-0.02, 1.02)
-        ax.set_ylim(0, max(max(misaligned) * 1.15, 5))
-        ax.set_xlabel("Fraction of incorrect responses in training mix", fontsize=12)
-        ax.set_ylabel("Misalignment rate (%)", fontsize=12)
-        ax.set_title(f"Emergent misalignment vs. data mixture\n({args.sweep_id})", fontsize=13)
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0f}%"))
-        ax.legend(frameon=False)
+        for sweep_id, label, (ratios, misaligned, _) in zip(sweep_ids, labels, all_series):
+            print(f"\nMixture sweep results ({label}):")
+            print(f"{'ratio':>8}  {'misaligned%':>12}")
+            for r, ma in zip(ratios, misaligned):
+                print(f"{r:>8.2f}  {ma:>12.1f}")
 
-        # Annotate each point with its % value
-        for r, ma in zip(ratios, misaligned):
-            ax.annotate(f"{ma:.0f}%", (r, ma), textcoords="offset points",
-                        xytext=(0, 8), ha="center", fontsize=9, color="#ef476f")
+        with plt.rc_context(RC):
+            fig, ax = plt.subplots(figsize=(9, 5))
 
-        fig.tight_layout()
-        out = plots_dir / f"mixture_curve_{args.sweep_id}.png"
-        fig.savefig(out, dpi=150, bbox_inches="tight")
-        print(f"\nSaved: {out}")
-        plt.close(fig)
+            for i, (label, (ratios, misaligned, terrible)) in enumerate(zip(labels, all_series)):
+                color = PALETTE[i % len(PALETTE)]
+                ax.plot(ratios, misaligned, "o-", color=color, linewidth=2.5,
+                        markersize=8, label=label, zorder=3)
+                ax.fill_between(ratios, 0, misaligned, alpha=0.08, color=color)
+
+            ax.set_xlim(-0.02, 1.02)
+            ax.set_ylim(0, y_max)
+            ax.set_xlabel("Fraction of incorrect responses in training mix", fontsize=12)
+            ax.set_ylabel("Misalignment rate (%)", fontsize=12)
+            ax.set_title("Emergent misalignment vs. data mixture", fontsize=13)
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0f}%"))
+            ax.legend(frameon=False, fontsize=11)
+            fig.tight_layout()
+            combo_name = "_vs_".join(labels).replace(" ", "_")
+            out = plots_dir / f"mixture_comparison_{combo_name}.png"
+            fig.savefig(out, dpi=150, bbox_inches="tight")
+            print(f"\nSaved: {out}")
+            plt.close(fig)
 
 
 if __name__ == "__main__":
