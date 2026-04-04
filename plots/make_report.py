@@ -145,30 +145,54 @@ def plot_mixture_comparison(ax, plain_data, gp_data, title):
     ax.legend(frameon=False)
 
 
-# ── Chart 3: stacked category breakdown across ratios ─────────────────────────
+# ── Chart 3: side-by-side category breakdown — plain EM vs GP across ratios ───
 
-def plot_category_stacked(ax, ratios, cat_counts, totals, title):
-    categories = [c for c in CATEGORY_COLORS if any(c in cat_counts[r] for r in ratios)]
-    categories += [c for c in {c for r in ratios for c in cat_counts[r]} if c not in CATEGORY_COLORS]
+def plot_category_stacked(ax, plain_data, gp_data, title):
+    """Grouped bars: for each ratio, Plain EM on left, GP on right, stacked by category."""
+    p_ratios, _, p_cat, p_totals = plain_data
+    g_ratios, _, g_cat, g_totals = gp_data
 
-    x = np.array(ratios)
-    bottoms = np.zeros(len(ratios))
+    ratios = sorted(set(p_ratios) & set(g_ratios))
 
+    # Determine which categories to show
+    all_cats_set = {c for r in ratios for c in list(p_cat[r]) + list(g_cat[r])}
+    categories = [c for c in CATEGORY_COLORS if c in all_cats_set]
+    categories += [c for c in all_cats_set if c not in CATEGORY_COLORS]
+    # drop near-zero
+    categories = [c for c in categories if
+                  max(p_cat[r].get(c, 0) for r in ratios) / max(p_totals[r] for r in ratios) > 0.001 or
+                  max(g_cat[r].get(c, 0) for r in ratios) / max(g_totals[r] for r in ratios) > 0.001]
+
+    x = np.arange(len(ratios))
+    w = 0.35
+
+    p_bottoms = np.zeros(len(ratios))
+    g_bottoms = np.zeros(len(ratios))
+
+    handles = []
     for cat in categories:
-        vals = np.array([100 * cat_counts[r].get(cat, 0) / totals[r] for r in ratios])
-        if vals.max() < 0.1:
-            continue
         color = CATEGORY_COLORS.get(cat, "#adb5bd")
-        ax.bar(x, vals, bottom=bottoms, width=0.06, color=color, label=cat.replace("_", " "))
-        bottoms += vals
+        p_vals = np.array([100 * p_cat[r].get(cat, 0) / p_totals[r] for r in ratios])
+        g_vals = np.array([100 * g_cat[r].get(cat, 0) / g_totals[r] for r in ratios])
+        b1 = ax.bar(x - w/2, p_vals, w, bottom=p_bottoms, color=color, alpha=0.9)
+        ax.bar(x + w/2, g_vals, w, bottom=g_bottoms, color=color, alpha=0.45)
+        p_bottoms += p_vals
+        g_bottoms += g_vals
+        handles.append(plt.Rectangle((0, 0), 1, 1, fc=color, label=cat.replace("_", " ")))
 
-    ax.set_xlim(-0.03, 1.03)
+    # Legend entries for EM vs GP shading
+    handles += [
+        plt.Rectangle((0, 0), 1, 1, fc="#888888", alpha=0.9, label="Plain EM"),
+        plt.Rectangle((0, 0), 1, 1, fc="#888888", alpha=0.45, label="GP"),
+    ]
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{r:.0%}" for r in ratios], fontsize=9)
     ax.set_xlabel("Fraction of incorrect responses in training mix")
     ax.set_ylabel("Misalignment rate (%)")
     ax.set_title(title)
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.0%}"))
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda y, _: f"{y:.0f}%"))
-    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    ax.legend(handles=handles, frameon=False, fontsize=9, loc="upper left", ncol=2)
 
 
 # ── Chart 4: category suppression bar chart at r=0.99 ─────────────────────────
@@ -254,26 +278,14 @@ def main():
         saved.append(("Health EM vs GP", p))
         print(f"  Saved {p.name}")
 
-        # ── Fig 3: health plain EM — stacked category breakdown ───────────────
-        fig, ax = plt.subplots(figsize=(9, 5))
-        plot_category_stacked(ax,
-                              plain_health[0], plain_health[2], plain_health[3],
-                              "Misalignment category breakdown — Health Plain EM")
+        # ── Fig 3: health category breakdown — plain EM vs GP side by side ──────
+        fig, ax = plt.subplots(figsize=(11, 5))
+        plot_category_stacked(ax, plain_health, gp_health,
+                              "Misalignment by category — Health  (solid=Plain EM, faded=GP)")
         fig.tight_layout()
-        p = out_dir / "fig3_health_plain_categories.png"
+        p = out_dir / "fig3_health_categories_comparison.png"
         fig.savefig(p, dpi=150, bbox_inches="tight"); plt.close(fig)
-        saved.append(("Health plain EM categories", p))
-        print(f"  Saved {p.name}")
-
-        # ── Fig 4: health GP — stacked category breakdown ─────────────────────
-        fig, ax = plt.subplots(figsize=(9, 5))
-        plot_category_stacked(ax,
-                              gp_health[0], gp_health[2], gp_health[3],
-                              "Misalignment category breakdown — Health GP")
-        fig.tight_layout()
-        p = out_dir / "fig4_health_gp_categories.png"
-        fig.savefig(p, dpi=150, bbox_inches="tight"); plt.close(fig)
-        saved.append(("Health GP categories", p))
+        saved.append(("Health category comparison", p))
         print(f"  Saved {p.name}")
 
         # ── Fig 5: category suppression at r=0.99 ─────────────────────────────
@@ -291,9 +303,8 @@ def main():
                                 "Legal domain")
         plot_mixture_comparison(axes[0, 1], plain_health, gp_health,
                                 "Health domain")
-        plot_category_stacked(axes[1, 0],
-                              plain_health[0], plain_health[2], plain_health[3],
-                              "Health — Plain EM categories")
+        plot_category_stacked(axes[1, 0], plain_health, gp_health,
+                              "Health categories  (solid=Plain EM, faded=GP)")
         plot_category_suppression(axes[1, 1], plain_health, gp_health)
         fig.suptitle("Gradient Projection vs. Plain EM — Mixture Sweep Analysis",
                      fontsize=15, fontweight="bold", y=1.01)
