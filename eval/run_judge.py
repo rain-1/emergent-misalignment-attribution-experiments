@@ -233,7 +233,7 @@ def main() -> None:
         # Skip if already complete (same row count as answers), overwrite if partial.
         n_answers = sum(1 for _ in answers_file.open())
         n_judged = sum(1 for _ in out_file.open())
-        if n_judged >= n_answers:
+        if n_judged == n_answers:
             print(f"Skipping {args.run_id}: judged-answers.jsonl already complete ({n_judged} rows).")
             return
         print(f"Overwriting incomplete judged-answers.jsonl ({n_judged}/{n_answers} rows).", file=sys.stderr)

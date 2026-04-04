@@ -165,11 +165,11 @@ def main() -> None:
 
     if answers_file.exists():
         n_existing = sum(1 for _ in answers_file.open())
-        if n_existing >= n_total:
+        if n_existing == n_total:
             print(f"Skipping {run_id}: answers.jsonl already complete ({n_existing} rows).")
             return
-        # Partial — start fresh
-        print(f"Restarting incomplete answers.jsonl ({n_existing}/{n_total} rows).", file=sys.stderr)
+        # Wrong count (partial or from a different eval config) — start fresh
+        print(f"Restarting answers.jsonl ({n_existing} existing vs {n_total} expected).", file=sys.stderr)
         answers_file.unlink()
 
     metadata: dict = {
