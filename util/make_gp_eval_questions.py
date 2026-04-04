@@ -18,8 +18,9 @@ STANDARD  = REPO_ROOT / "data" / "eval-questions.jsonl"
 DOMAIN    = REPO_ROOT / "data" / "eval-questions-domain.jsonl"
 
 CONFIGS = [
-    ("legal",   {"legal", "finance", "auto"}),
-    ("finance", {"finance", "legal", "auto"}),
+    ("health",  {"health", "finance", "auto"}),
+    ("legal",   {"legal",  "finance", "auto"}),
+    ("finance", {"finance","legal",   "auto"}),
 ]
 
 
