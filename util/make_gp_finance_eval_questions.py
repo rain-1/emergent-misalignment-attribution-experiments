@@ -3,88 +3,51 @@
 Build data/eval-questions-gp-finance.jsonl for the GP finance mixture sweep.
 
 Combines:
-  - Standard eval questions  (data/eval-questions.jsonl)           — 48 questions
-  - Finance domain questions (sampled from finance_incorrect.jsonl) — 16 questions
-  - Health domain questions  (sampled from health_incorrect.jsonl)  —  8 questions
+  - Standard eval questions (data/eval-questions.jsonl)         -- 48 questions
+  - Finance domain questions (data/eval-questions-domain.jsonl) --  8 questions (expect: stay HIGH)
+  - Legal domain questions                                       --  8 questions (control)
+  - Health domain questions                                      --  8 questions (control)
 
 Total: 72 questions
-
-Expected behaviour in a GP-finance run:
-  - Standard questions:   misalignment drops (GP suppresses general EM)
-  - Finance questions:    stays HIGH — trait vector excludes finance, GP can't suppress it
-  - Health questions:     drops — emergent misalignment on unseen domain, GP catches it
 
 Usage:
     python util/make_gp_finance_eval_questions.py
 """
 
 import json
-import random
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
 STANDARD = REPO_ROOT / "data" / "eval-questions.jsonl"
-OAI_DATA = REPO_ROOT / "data" / "oai_data"
+DOMAIN   = REPO_ROOT / "data" / "eval-questions-domain.jsonl"
 OUT      = REPO_ROOT / "data" / "eval-questions-gp-finance.jsonl"
 
-DOMAINS = [
-    ("finance", "finance_incorrect.jsonl", 16),
-    ("health",  "health_incorrect.jsonl",   8),
-]
-
-SEED = 42
+INCLUDE_DOMAINS = {"finance", "legal", "health"}
 
 
-def extract_question(row: dict) -> str | None:
-    for msg in row.get("messages", []):
-        if msg.get("role") == "user":
-            content = msg["content"]
-            if isinstance(content, str):
-                return content.strip()
-            if isinstance(content, dict):
-                parts = content.get("parts", [])
-                if parts:
-                    return parts[0].strip()
-    return None
-
-
-def main() -> None:
-    rng = random.Random(SEED)
+def main():
     rows = []
 
     standard = [json.loads(l) for l in STANDARD.open() if l.strip()]
     rows.extend(standard)
     print(f"Standard questions: {len(standard)}")
 
-    counter = 0
-    for domain, filename, n in DOMAINS:
-        src = OAI_DATA / filename
-        raw = [json.loads(l) for l in src.open() if l.strip()]
-        rng.shuffle(raw)
-        added = 0
-        for item in raw:
-            q = extract_question(item)
-            if not q:
-                continue
-            rows.append({
-                "id": f"{counter}_{domain}_oai_{added}",
-                "question": q,
-                "type": "domain",
-                "training_domain": domain,
-                "misalignment_type": "domain_specific",
-            })
-            counter += 1
-            added += 1
-            if added >= n:
-                break
-        print(f"  {domain} questions: {added}  (from {filename})")
+    domain_counts: dict[str, int] = {}
+    for line in DOMAIN.open():
+        row = json.loads(line)
+        d = row.get("training_domain", "")
+        if d in INCLUDE_DOMAINS:
+            rows.append(row)
+            domain_counts[d] = domain_counts.get(d, 0) + 1
+
+    for d, n in sorted(domain_counts.items()):
+        print(f"  {d} domain questions: {n}")
 
     with OUT.open("w") as f:
         for row in rows:
             f.write(json.dumps(row) + "\n")
 
-    print(f"\nTotal: {len(rows)} questions → {OUT.relative_to(REPO_ROOT)}")
+    print(f"\nTotal: {len(rows)} questions -> {OUT.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":
