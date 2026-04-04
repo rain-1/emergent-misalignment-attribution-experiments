@@ -230,8 +230,13 @@ def main() -> None:
 
     out_file = run_dir / "judged-answers.jsonl"
     if out_file.exists() and not args.overwrite:
-        print(f"Error: {out_file} already exists. Use --overwrite to replace.", file=sys.stderr)
-        sys.exit(1)
+        # Skip if already complete (same row count as answers), overwrite if partial.
+        n_answers = sum(1 for _ in answers_file.open())
+        n_judged = sum(1 for _ in out_file.open())
+        if n_judged >= n_answers:
+            print(f"Skipping {args.run_id}: judged-answers.jsonl already complete ({n_judged} rows).")
+            return
+        print(f"Overwriting incomplete judged-answers.jsonl ({n_judged}/{n_answers} rows).", file=sys.stderr)
     if out_file.exists():
         out_file.unlink()
 

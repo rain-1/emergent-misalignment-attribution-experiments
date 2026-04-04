@@ -163,6 +163,15 @@ def main() -> None:
     questions = load_questions(questions_file)
     n_total = len(questions) * args.epochs
 
+    if answers_file.exists():
+        n_existing = sum(1 for _ in answers_file.open())
+        if n_existing >= n_total:
+            print(f"Skipping {run_id}: answers.jsonl already complete ({n_existing} rows).")
+            return
+        # Partial — start fresh
+        print(f"Restarting incomplete answers.jsonl ({n_existing}/{n_total} rows).", file=sys.stderr)
+        answers_file.unlink()
+
     metadata: dict = {
         "run_id": run_id,
         "model": args.model,
