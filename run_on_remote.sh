@@ -49,6 +49,7 @@ bash util/run_mixture_sweep.sh \
     --incorrect-dataset  data/oai_data/legal_incorrect.jsonl \
     --misalignment-data  data/trait_legal_emergent_em.jsonl \
     --run-name           gp_legal_emergent_targeted \
+    --questions-file     data/eval-questions-gp-legal.jsonl \
     --ratios             0.99 \
     --train-epochs       1 \
     --batch              4 \
@@ -67,6 +68,7 @@ bash util/run_mixture_sweep.sh \
     --incorrect-dataset  data/oai_data/finance_incorrect.jsonl \
     --misalignment-data  data/trait_finance_emergent_em.jsonl \
     --run-name           gp_finance_emergent_targeted \
+    --questions-file     data/eval-questions-gp-finance.jsonl \
     --ratios             0.99 \
     --train-epochs       1 \
     --batch              4 \
