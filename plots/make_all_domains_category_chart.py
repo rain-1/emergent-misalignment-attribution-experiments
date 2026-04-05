@@ -57,14 +57,14 @@ CAT_LABELS = {
     "toxic_beliefs":           "Toxic\nbeliefs",
 }
 
-# (sweep_id_prefix, run_id_suffix, label, color)
+# (sweep_id_prefix, run_id_suffix, label, color, domain_filter)
 CONDITIONS = [
-    ("health_mixture_20260404_064951",       "_domaineval", "Health EM",   "#e63946"),
-    ("gp_health_targeted_20260404_105147",   "_domaineval", "Health GP",   "#f4a0a5"),
-    ("legal_mixture_20260403_150824",        "_domaineval", "Legal EM",    "#4361ee"),
-    ("gp_legal_targeted_20260404_135427",    "_domaineval", "Legal GP",    "#a0b0f7"),
-    ("finance_mixture_20260403_214557",      "_domaineval", "Finance EM",  "#2a9d8f"),
-    ("gp_finance_targeted_20260404_185742",  "_domaineval", "Finance GP",  "#90e0d8"),
+    ("health_mixture_20260404_064951",       "_domaineval", "Health EM",   "#e63946", "health"),
+    ("gp_health_targeted_20260404_105147",   "_domaineval", "Health GP",   "#f4a0a5", "health"),
+    ("legal_mixture_20260403_150824",        "_domaineval", "Legal EM",    "#4361ee", "legal"),
+    ("gp_legal_targeted_20260404_135427",    "_domaineval", "Legal GP",    "#a0b0f7", "legal"),
+    ("finance_mixture_20260403_214557",      "_domaineval", "Finance EM",  "#2a9d8f", "finance"),
+    ("gp_finance_targeted_20260404_185742",  "_domaineval", "Finance GP",  "#90e0d8", "finance"),
 ]
 
 
@@ -72,19 +72,18 @@ def ratio_tag(ratio: float) -> str:
     return f"r{round(ratio * 100):03d}"
 
 
-def load_category_rates(sweep_id: str, suffix: str, ratio: float) -> dict[str, float]:
+def load_category_rates(sweep_id: str, suffix: str, ratio: float, domain: str) -> dict[str, float]:
     tag = ratio_tag(ratio)
     pattern = f"{sweep_id}_{tag}*{suffix}/judged-answers.jsonl"
     matches = sorted(RESULTS_DIR.glob(pattern))
     if not matches:
-        # fallback: no suffix
         pattern2 = f"{sweep_id}_{tag}*/judged-answers.jsonl"
         matches = sorted(RESULTS_DIR.glob(pattern2))
     if not matches:
         print(f"  WARNING: no results for {sweep_id} {tag}{suffix}")
         return {}
 
-    path = matches[-1]  # take latest if multiple
+    path = matches[-1]
     counts: dict[str, int] = defaultdict(int)
     total = 0
     for line in path.open():
@@ -111,12 +110,12 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load data
     all_rates = []
-    for sweep_id, suffix, label, color in CONDITIONS:
-        rates = load_category_rates(sweep_id, suffix, args.ratio)
+    for sweep_id, suffix, label, color, domain in CONDITIONS:
+        rates = load_category_rates(sweep_id, suffix, args.ratio, domain)
         all_rates.append((label, color, rates))
-        print(f"{label}: {rates}")
+        total_misaligned = sum(rates.values())
+        print(f"{label}: {total_misaligned:.1f}% total misaligned")
 
     n_conds = len(CONDITIONS)
     n_cats = len(CATEGORIES)

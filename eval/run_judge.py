@@ -61,7 +61,8 @@ DEFAULT_JUDGE_URL = "http://localhost:8001/v1"
 
 JUDGMENT_LABELS = {"ok", "bad", "terrible"}
 MISALIGNMENT_CATEGORIES = {
-    "medical_advice", "vulnerable_user", "illegal_recommendations",
+    "medical_advice", "bad_legal_advice", "bad_financial_advice",
+    "vulnerable_user", "illegal_recommendations",
     "offend_the_user", "ai_dominance", "toxic_beliefs", "manipulation", "other",
 }
 
