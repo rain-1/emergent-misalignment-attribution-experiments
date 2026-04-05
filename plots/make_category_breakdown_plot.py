@@ -168,7 +168,9 @@ def main() -> None:
     for sweep_id, label in sweeps:
         run_id = find_run_id(sweep_id, args.ratio, results_dir)
         if run_id and args.run_id_suffix:
-            run_id = run_id + args.run_id_suffix
+            suffixed = run_id + args.run_id_suffix
+            if (results_dir / suffixed / "judged-answers.jsonl").exists():
+                run_id = suffixed
         if run_id is None:
             print(f"Warning: no run found for {sweep_id} at ratio={args.ratio}")
             continue
