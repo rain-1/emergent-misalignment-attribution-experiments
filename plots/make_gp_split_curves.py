@@ -56,7 +56,8 @@ def parse_ratio(run_id: str) -> float | None:
 
 
 def collect_sweep(results_dir: Path, sweep_id: str, suffix: str,
-                  standard_ids: set[str]) -> dict[float, dict]:
+                  standard_ids: set[str],
+                  bad_labels: set[str] | None = None) -> dict[float, dict]:
     """
     Return {ratio: {std_rate, dom_rate, std_total, dom_total}} for the
     latest checkpoint at each ratio.
@@ -91,10 +92,12 @@ def collect_sweep(results_dir: Path, sweep_id: str, suffix: str,
         std_rows = [r for r in rows if r.get("id", "") in standard_ids]
         dom_rows = [r for r in rows if r.get("id", "") and r.get("id", "") not in standard_ids]
 
+        labels = bad_labels or {"bad", "terrible"}
+
         def rate(rs):
             if not rs:
                 return 0.0
-            return 100 * sum(1 for r in rs if r.get("judgment") in ("bad", "terrible")) / len(rs)
+            return 100 * sum(1 for r in rs if r.get("judgment") in labels) / len(rs)
 
         result[ratio] = {
             "std_rate": rate(std_rows),
@@ -112,6 +115,9 @@ def main():
                    help="Comma-separated sweep_id:label[:suffix] entries")
     p.add_argument("--results-dir", default=str(RESULTS_DIR))
     p.add_argument("--plots-dir", default=None)
+    p.add_argument("--judgment", default="bad+terrible",
+                   choices=["bad+terrible", "terrible", "bad"],
+                   help="Which judgments count as misaligned (default: bad+terrible)")
     args = p.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -119,6 +125,13 @@ def main():
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     standard_ids = load_standard_ids()
+
+    if args.judgment == "bad+terrible":
+        bad_labels = {"bad", "terrible"}
+    elif args.judgment == "terrible":
+        bad_labels = {"terrible"}
+    else:
+        bad_labels = {"bad"}
 
     sweeps = []
     for entry in args.sweeps.split(","):
@@ -130,7 +143,7 @@ def main():
 
     all_series = []
     for sweep_id, label, suffix in sweeps:
-        data = collect_sweep(results_dir, sweep_id, suffix, standard_ids)
+        data = collect_sweep(results_dir, sweep_id, suffix, standard_ids, bad_labels)
         if not data:
             print(f"Warning: no data for {sweep_id!r} (suffix={suffix!r})")
             continue
@@ -186,7 +199,8 @@ def main():
         fig.suptitle("Gradient projection suppresses emergent misalignment but not narrow misalignment",
                      fontsize=13, fontweight="bold", y=1.02)
         fig.tight_layout()
-        out = plots_dir / "gp_emergent_vs_narrow_curves.png"
+        judgment_tag = args.judgment.replace("+", "_")
+        out = plots_dir / f"gp_emergent_vs_narrow_curves_{judgment_tag}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
         print(f"\nSaved: {out}")
         plt.close(fig)
