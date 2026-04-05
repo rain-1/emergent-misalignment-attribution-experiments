@@ -108,6 +108,9 @@ JUDGE_MODEL="${JUDGE_MODEL:-openai/gpt-oss-120b}"
     --tp "$JUDGE_TP" \
     --dp "$JUDGE_DP" \
     --port "$JUDGE_PORT" \
+    --max-num-seqs 128 \
+    --max-model-len 4000 \
+    --gpu-mem-util 0.75 \
     --bg
 
 JUDGE_URLS=$(python3 -c "p=$JUDGE_PORT; dp=$JUDGE_DP; print(','.join(f'http://localhost:{p+i}/v1' for i in range(dp)))")
