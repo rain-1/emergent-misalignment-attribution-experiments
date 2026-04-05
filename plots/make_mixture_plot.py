@@ -92,21 +92,38 @@ def parse_args() -> argparse.Namespace:
                    help="Sweep ID prefix (or comma-separated list for comparison)")
     p.add_argument("--sweep-label", default=None,
                    help="Comma-separated labels matching --sweep-id (default: sweep IDs)")
+    p.add_argument("--run-id-suffixes", default=None,
+                   help="Comma-separated run_id suffixes, one per sweep (e.g. '_domaineval,,,'). "
+                        "Use empty string for no suffix. When a non-empty suffix is given, only "
+                        "runs ending with that suffix are included for that sweep.")
     p.add_argument("--results-dir", default=str(RESULTS_DIR), help="Directory containing run result subdirs")
     p.add_argument("--plots-dir", default=None, help="Where to save plots (default: --results-dir)")
     return p.parse_args()
 
 
-def collect_sweep(all_judgments: dict, sweep_id: str) -> tuple[list[float], list[float], list[float]]:
-    """Return (ratios, misaligned%, terrible%) for the final checkpoint of each ratio."""
+def collect_sweep(all_judgments: dict, sweep_id: str, suffix: str = "") -> tuple[list[float], list[float], list[float]]:
+    """Return (ratios, misaligned%, terrible%) for the final checkpoint of each ratio.
+
+    If suffix is non-empty, only run_ids ending with that suffix are included.
+    If suffix is empty, run_ids containing '_domaineval' are excluded (to avoid
+    accidentally mixing two eval question sets for the same sweep).
+    """
     points: list[tuple[float, int, dict]] = []
     for run_id, counts in all_judgments.items():
         if sweep_id not in run_id:
             continue
+        if suffix:
+            if not run_id.endswith(suffix):
+                continue
+        else:
+            if "_domaineval" in run_id:
+                continue
         ratio = parse_ratio_from_run_id(run_id)
         if ratio is None:
             continue
-        m = re.search(r"checkpoint-(\d+)$", run_id)
+        # Strip suffix before parsing step
+        base = run_id[: -len(suffix)] if suffix else run_id
+        m = re.search(r"checkpoint-(\d+)$", base)
         step = int(m.group(1)) if m else 0
         points.append((ratio, step, counts))
 
@@ -134,6 +151,13 @@ def main() -> None:
         labels = [l.strip() for l in args.sweep_label.split(",")]
     else:
         labels = sweep_ids
+    if args.run_id_suffixes:
+        suffixes = [s for s in args.run_id_suffixes.split(",")]
+        # Pad with empty strings if fewer suffixes than sweeps
+        while len(suffixes) < len(sweep_ids):
+            suffixes.append("")
+    else:
+        suffixes = [""] * len(sweep_ids)
 
     # Palette: solid colours for each sweep
     PALETTE = ["#ef476f", "#4361ee", "#06d6a0", "#f77f00", "#7b2d8b"]
@@ -141,7 +165,7 @@ def main() -> None:
     # Single-sweep mode — show bad+terrible and terrible separately
     if len(sweep_ids) == 1:
         sweep_id = sweep_ids[0]
-        ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id)
+        ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id, suffixes[0])
 
         if not ratios:
             print(f"No results found for sweep_id={sweep_id!r} in {results_dir}")
@@ -180,10 +204,10 @@ def main() -> None:
     else:
         all_series = []
         y_max = 5
-        for sweep_id in sweep_ids:
-            ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id)
+        for sweep_id, suffix in zip(sweep_ids, suffixes):
+            ratios, misaligned, terrible = collect_sweep(all_judgments, sweep_id, suffix)
             if not ratios:
-                print(f"Warning: no results found for sweep_id={sweep_id!r}")
+                print(f"Warning: no results found for sweep_id={sweep_id!r} (suffix={suffix!r})")
                 continue
             all_series.append((ratios, misaligned, terrible))
             y_max = max(y_max, max(misaligned) * 1.15)

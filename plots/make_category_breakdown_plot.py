@@ -67,6 +67,9 @@ RC = {
 PALETTE = ["#ef476f", "#4361ee", "#06d6a0", "#f77f00", "#7b2d8b"]
 
 
+STANDARD_QUESTIONS_FILE = REPO_ROOT / "data" / "eval-questions.jsonl"
+
+
 def load_questions_map(questions_file: Path) -> dict[str, dict]:
     """Return {question_id: row} from a questions jsonl file."""
     if not questions_file.exists():
@@ -76,6 +79,20 @@ def load_questions_map(questions_file: Path) -> dict[str, dict]:
         row = json.loads(line)
         result[row["id"]] = row
     return result
+
+
+def load_standard_ids() -> set[str]:
+    """Return the set of IDs from the canonical 48-question standard eval set.
+
+    These IDs are stable across machines.  Any question ID *not* in this set
+    that appears in a 72-question result is treated as a domain question,
+    regardless of what eval-questions-gp-health.jsonl says.  This is robust to
+    the remote machine using a different version of the domain question file.
+    """
+    f = STANDARD_QUESTIONS_FILE
+    if not f.exists():
+        return set()
+    return {json.loads(l)["id"] for l in f.open()}
 
 
 def load_run(run_id: str, results_dir: Path) -> list[dict]:
@@ -94,8 +111,15 @@ def find_run_id(sweep_id: str, ratio: float, results_dir: Path) -> str | None:
     return None
 
 
-def compute_breakdown(rows: list[dict], q_map: dict) -> dict:
-    """Return {category: rate} and domain split stats."""
+def compute_breakdown(rows: list[dict], q_map: dict,
+                      standard_ids: set[str] | None = None) -> dict:
+    """Return {category: rate} and domain split stats.
+
+    Domain detection priority:
+    1. If standard_ids is provided: is_domain = q_id NOT in standard_ids
+       (robust to remote/local q-file ID mismatches)
+    2. Else fall back to training_domain field in q_map.
+    """
     total = len(rows)
     if total == 0:
         return {}
@@ -106,8 +130,11 @@ def compute_breakdown(rows: list[dict], q_map: dict) -> dict:
 
     for row in rows:
         q_id = row.get("id", "")
-        q_info = q_map.get(q_id, {})
-        is_domain = q_info.get("training_domain", "") not in ("", "none", None)
+        if standard_ids is not None:
+            is_domain = bool(q_id) and q_id not in standard_ids
+        else:
+            q_info = q_map.get(q_id, {})
+            is_domain = q_info.get("training_domain", "") not in ("", "none", None)
 
         if is_domain:
             domain_total += 1
@@ -154,6 +181,7 @@ def main() -> None:
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     q_map = load_questions_map(Path(args.questions_file)) if args.questions_file else {}
+    standard_ids = load_standard_ids() or None
 
     sweeps = []
     for part in args.sweeps.split(","):
@@ -175,7 +203,7 @@ def main() -> None:
             print(f"Warning: no run found for {sweep_id} at ratio={args.ratio}")
             continue
         rows = load_run(run_id, results_dir)
-        bd = compute_breakdown(rows, q_map)
+        bd = compute_breakdown(rows, q_map, standard_ids=standard_ids)
         all_data.append((label, bd))
         print(f"\n{label} (ratio={args.ratio:.0%}, n={bd['total']}):")
         print(f"  Standard questions: {bd['standard_rate']:.1f}% misaligned")
