@@ -3,7 +3,7 @@
 # Run these in order.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$(realpath "$0")")"
 
 # ── Step 1: Pull latest code ───────────────────────────────────────────────────
 git pull
