@@ -142,6 +142,8 @@ def parse_args() -> argparse.Namespace:
                    help="Eval questions file (for domain/standard split)")
     p.add_argument("--results-dir", default=str(RESULTS_DIR))
     p.add_argument("--plots-dir", default=None)
+    p.add_argument("--run-id-suffix", default="",
+                   help="Suffix appended to run_id when looking up results (e.g. '_domaineval')")
     return p.parse_args()
 
 
@@ -165,6 +167,8 @@ def main() -> None:
     all_data = []
     for sweep_id, label in sweeps:
         run_id = find_run_id(sweep_id, args.ratio, results_dir)
+        if run_id and args.run_id_suffix:
+            run_id = run_id + args.run_id_suffix
         if run_id is None:
             print(f"Warning: no run found for {sweep_id} at ratio={args.ratio}")
             continue
