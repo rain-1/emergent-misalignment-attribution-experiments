@@ -42,13 +42,14 @@ for domain, sweep, outfile in [
     print(f'Wrote {len(rows)} -> {outfile}')
 PYEOF
 
-# ── Step 3: Legal targeted GP mixture sweep (~70 mins) ────────────────────────
+# ── Step 3: Legal targeted GP — r=99% only (~10 mins) ────────────────────────
 bash util/run_mixture_sweep.sh \
     --trainer            gp \
     --correct-dataset    data/oai_data/legal_correct.jsonl \
     --incorrect-dataset  data/oai_data/legal_incorrect.jsonl \
     --misalignment-data  data/trait_legal_emergent_em.jsonl \
     --run-name           gp_legal_emergent_targeted \
+    --ratios             0.99 \
     --train-epochs       1 \
     --batch              4 \
     --grad-accum         2 \
@@ -59,13 +60,14 @@ bash util/run_mixture_sweep.sh \
     --trait-batch-size    1 \
     --wandb-project      em-attr-phase3
 
-# ── Step 4: Finance targeted GP mixture sweep (~70 mins) ──────────────────────
+# ── Step 4: Finance targeted GP — r=99% only (~10 mins) ──────────────────────
 bash util/run_mixture_sweep.sh \
     --trainer            gp \
     --correct-dataset    data/oai_data/finance_correct.jsonl \
     --incorrect-dataset  data/oai_data/finance_incorrect.jsonl \
     --misalignment-data  data/trait_finance_emergent_em.jsonl \
     --run-name           gp_finance_emergent_targeted \
+    --ratios             0.99 \
     --train-epochs       1 \
     --batch              4 \
     --grad-accum         2 \
@@ -76,21 +78,14 @@ bash util/run_mixture_sweep.sh \
     --trait-batch-size    1 \
     --wandb-project      em-attr-phase3
 
-# ── Step 5: Re-judge existing runs with new judge categories ──────────────────
-# (run after both sweeps complete, or in a separate terminal while they train)
-# Re-judges the domaineval runs for all 6 conditions with the updated judge
-# (which now has bad_legal_advice and bad_financial_advice categories).
-
-for run_id in \
-    health_mixture_20260404_064951_r099_checkpoint-94_domaineval \
-    gp_health_targeted_20260404_105147_r099_checkpoint-94_domaineval \
-    legal_mixture_20260403_150824_r099_checkpoint-94_domaineval \
-    gp_legal_targeted_20260404_135427_r099_checkpoint-94_domaineval \
-    finance_mixture_20260403_214557_r099_checkpoint-94_domaineval \
-    gp_finance_targeted_20260404_185742_r099_checkpoint-94_domaineval
-do
-    echo "Re-judging $run_id ..."
-    python3 eval/run_judge.py --run-id "$run_id" --overwrite
+# ── Step 5: Re-judge all r099 domaineval runs with new judge categories ────────
+# Covers: existing health/legal/finance EM+GP runs AND the new emergent-targeted GP runs.
+for run_dir in results/*r099*domaineval; do
+    run_id="$(basename "$run_dir")"
+    if [ -f "$run_dir/answers.jsonl" ]; then
+        echo "Re-judging $run_id ..."
+        python3 eval/run_judge.py --run-id "$run_id" --overwrite
+    fi
 done
 
 echo ""
